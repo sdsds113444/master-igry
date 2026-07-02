@@ -12,23 +12,23 @@ const fadeUp = {
   show: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.06, duration: 0.5 } }),
 }
 
-// Тематические образы КОЯ по играм (кадры из мультиков + переиспользованные общие рендеры
-// для игр без своего кадра — Эмпатия/Битва капитанов/Марафон). Нет образа → градиент+эмодзи.
+// Тематические образы КОЯ по играм — кадры выдернуты прямо из мультиков этих игр
+// (video/МУЛЬТ 5/7/8.mp4 через ffmpeg). Нет образа → градиент+эмодзи.
 const GAME_IMAGE: Record<string, string> = {
   detective: '/koya/game-detective.jpg',
   noforward: '/koya/game-noforward.jpg',
   iknow: '/koya/game-iknow.jpg',
   onecall: '/koya/game-onecall.jpg',
-  empathy: '/koya/game-empathy.jpg', // КОЯ выглядывает — тёплый, любопытный взгляд
-  captains: '/koya/game-captains.jpg', // КОЯ на сцене с микрофоном — энергичный, боевой
-  marathon: '/koya/game-marathon.jpg', // КОЯ сидит спокойно — уверенный финал сезона
+  empathy: '/koya/game-empathy.jpg', // КОЯ держит светящееся сердце у груди
+  captains: '/koya/game-captains.jpg', // КОЯ в блестящем пиджаке с микрофоном на сцене
+  marathon: '/koya/game-marathon.jpg', // КОЯ с финишным флагом — финал сезона
 }
 
 // Позиция кадра в баннере — под каждую композицию своя (персонаж не всегда по центру).
 const GAME_IMAGE_POSITION: Record<string, string> = {
-  empathy: '18% 42%', // персонаж выглядывает слева
-  captains: '82% 38%', // персонаж на сцене справа
-  marathon: '80% 30%', // персонаж сидит правее центра
+  empathy: 'center 28%', // КОЯ держит светящееся сердце у груди
+  captains: 'center 22%', // КОЯ в блестящем пиджаке с микрофоном
+  marathon: 'center 30%', // КОЯ с финишным флагом и конфетти
 }
 
 export default function Board() {
