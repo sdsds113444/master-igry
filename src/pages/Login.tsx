@@ -20,9 +20,10 @@ export default function Login() {
         {/* Сцена с маскотом */}
         <div className="relative hidden min-h-[420px] md:block">
           <img
-            src="/koya/koya-sitting.jpg"
+            src="/koya/koya-sit-crop.jpg"
             alt="Маскот КОЯ"
             className="absolute inset-0 h-full w-full object-cover"
+            style={{ objectPosition: 'center 38%' }}
           />
           <div className="absolute bottom-5 left-5 right-5">
             <div className="glass-dark rounded-2xl px-4 py-3">

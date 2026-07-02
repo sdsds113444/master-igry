@@ -8,6 +8,7 @@ interface Grade {
   cases: number
   bonus: boolean
   superBonus: boolean
+  feedback: string
 }
 
 export default function Admin() {
@@ -25,6 +26,7 @@ export default function Admin() {
         cases: s.cases,
         bonus: s.bonus > 0,
         superBonus: s.superBonus > 0,
+        feedback: s.feedback ?? '',
       }
     }
     return init
@@ -101,8 +103,8 @@ export default function Admin() {
           </div>
         </div>
 
-        <div className="max-h-[540px] overflow-y-auto">
-          <table className="w-full text-sm">
+        <div className="max-h-[540px] overflow-auto">
+          <table className="w-full min-w-[720px] text-sm">
             <thead className="sticky top-0 z-10 bg-white/80 backdrop-blur">
               <tr className="text-left text-[11px] font-bold uppercase tracking-wide text-ink-soft">
                 <th className="px-5 py-2.5">Команда</th>
@@ -110,6 +112,7 @@ export default function Admin() {
                 <th className="px-2 py-2.5 text-center">Очки за кейсы</th>
                 <th className="px-2 py-2.5 text-center">Бонус +1</th>
                 <th className="px-2 py-2.5 text-center">Супер +3</th>
+                <th className="px-2 py-2.5 text-left">ОС тренера</th>
                 <th className="px-4 py-2.5 text-right">Итог</th>
               </tr>
             </thead>
@@ -152,6 +155,15 @@ export default function Admin() {
                     </td>
                     <td className="px-2 text-center">
                       <input type="checkbox" checked={g.superBonus} disabled={!g.submitted} onChange={(e) => upd(t.id, { superBonus: e.target.checked })} className="h-4 w-4 accent-[var(--color-gold)] disabled:opacity-40" />
+                    </td>
+                    <td className="px-2">
+                      <input
+                        value={g.feedback}
+                        disabled={!g.submitted}
+                        onChange={(e) => upd(t.id, { feedback: e.target.value })}
+                        placeholder="комментарий команде…"
+                        className="w-52 rounded-lg border border-black/10 bg-white/80 px-2 py-1 text-xs outline-none focus:border-alfa/50 disabled:opacity-40"
+                      />
                     </td>
                     <td className="px-4 text-right font-display text-base font-extrabold">{sum}</td>
                   </tr>

@@ -20,6 +20,7 @@ export interface TeamScore {
   bonus: number // +1 за нестандарт
   superBonus: number // +3 за лучший FCR недели
   fcr: number // % FCR
+  feedback?: string // текст обратной связи тренера
 }
 
 export interface Team {
@@ -31,6 +32,7 @@ export interface Team {
   hue: number
   perGame: Record<string, TeamScore>
   total: number
+  coins: number
   rank?: number
 }
 
@@ -111,6 +113,14 @@ function seeded(i: number, salt: number) {
   return x - Math.floor(x)
 }
 
+const FEEDBACK_POOL = [
+  'Сильный ответ по FCR — клиенту не пришлось бы перезванивать. Добавьте больше живой эмпатии в первом кейсе.',
+  'Во 2-м кейсе проскочило «переведу в отдел» — за это снял балл. В остальном — отлично!',
+  'Эталонное решение по 3-му кейсу, забираю в примеры для онбординга 👏',
+  'Хорошо, но ответы суховаты: признайте эмоцию клиента словами, а не дежурным «понимаю».',
+  'Отличная командная работа. Не хватило конкретики: что именно оператор делает здесь и сейчас.',
+]
+
 export const TEAMS: Team[] = NAMES.map((name, i) => {
   const perGame: Record<string, TeamScore> = {}
   let total = 0
@@ -129,7 +139,11 @@ export const TEAMS: Team[] = NAMES.map((name, i) => {
     const bonus = seeded(i, g.num + 5) > 0.7 ? 1 : 0
     const superBonus = seeded(i, g.num + 9) > 0.86 ? 3 : 0
     const fcr = Math.round(70 + seeded(i, g.num + 11) * 26)
-    perGame[g.id] = { cases, bonus, superBonus, fcr }
+    const feedback =
+      seeded(i, g.num + 13) > 0.45
+        ? FEEDBACK_POOL[Math.floor(seeded(i, g.num + 17) * FEEDBACK_POOL.length)]
+        : undefined
+    perGame[g.id] = { cases, bonus, superBonus, fcr, feedback }
     total += cases + bonus + superBonus
   }
   return {
@@ -141,6 +155,7 @@ export const TEAMS: Team[] = NAMES.map((name, i) => {
     hue: Math.round(seeded(i, 3) * 360),
     perGame,
     total,
+    coins: 40 + total * 5,
   }
 })
   .sort((a, b) => b.total - a.total)
@@ -187,3 +202,45 @@ export const CURRENT_TASK = {
     },
   ] as CaseItem[],
 }
+
+/* ---- Состав команды (капитан редактирует) ---- */
+export const ROSTER_SEED = [
+  'Максим К. (капитан)', 'Анна С.', 'Игорь В.', 'Пётр Л.', 'Дарья М.',
+  'Олег Р.', 'Юлия Н.', 'Сергей Ф.', 'Мария Т.', 'Илья Г.',
+]
+
+/* ---- Чат команды (демо) ---- */
+export const TEAM_CHAT_SEED = [
+  { author: 'Анна С.', text: 'Народ, глянули мультик? В первом кейсе клиента реально жалко 😅', time: '10:02', me: false },
+  { author: 'Игорь В.', text: 'Ага. Предлагаю в ответе сразу признать эмоцию и извиниться за ситуацию на кассе.', time: '10:05', me: false },
+  { author: 'Максим К. (капитан)', text: 'Согласен. Я соберу общий ответ к четвергу, скидывайте формулировки сюда.', time: '10:07', me: true },
+]
+
+/* ---- Правила игры (из «параметры_игры») ---- */
+export const RULES = [
+  { icon: '🎮', title: 'Формат', text: 'Онлайн-игра между командами контакт-центра. Сезон — 9 недель, 7 игр.' },
+  { icon: '👥', title: 'Команды', text: '30 команд по 10 человек. Капитан регистрирует состав в личном кабинете.' },
+  { icon: '🎯', title: 'Цель', text: 'Прокачать решение вопроса на звонке/в чате — без перезвона и переводов (FCR).' },
+  { icon: '🗓️', title: 'Ритм недели', text: 'Понедельник — мультик + кейсы в кабинете. До пятницы 15:00 капитан сдаёт ответ команды.' },
+  { icon: '⭐', title: 'Оценка кейсов', text: '0 — не сдали · 1 — более 3 ошибок · 2 — менее 3 ошибок · 3 — без ошибок (по каждому кейсу).' },
+  { icon: '➕', title: 'Бонусы', text: 'Бонус +1 за нестандартное решение. Супер-бонус +3 команде с лучшим FCR недели.' },
+  { icon: '🧑‍🏫', title: 'Проверка', text: 'Тренер (1 на 1–2 команды) даёт обратную связь и ставит балл. Рейтинг обновляется в пятницу.' },
+  { icon: '🏆', title: 'Победитель', text: 'Команда с наибольшей суммой баллов за сезон. Итоги — в конце сезона.' },
+]
+
+/* ---- Призы (из презы) ---- */
+export const PRIZES = [
+  { place: '1 место', emoji: '🥇', title: 'Корпоратив на 100 000 ₽', text: 'Организация праздника для команды-победителя + большой мерч.', accent: '#ffc244' },
+  { place: '2–3 место', emoji: '🥈', title: 'Мерч Альфы', text: 'Фирменные наборы каждому участнику команды.', accent: '#c9cdd6' },
+  { place: 'Все участники', emoji: '🐾', title: 'Ачивки и КОЯ-койны', text: 'Значки за активность и койны, которые копятся весь сезон.', accent: '#ef3124' },
+]
+
+/* ---- Ачивки ---- */
+export const ACHIEVEMENTS = [
+  { emoji: '🎬', title: 'Первый мультик', done: true },
+  { emoji: '✅', title: 'Сдали 3 игры', done: true },
+  { emoji: '🔥', title: 'Лучший FCR недели', done: true },
+  { emoji: '⭐', title: 'Кейс без ошибок', done: true },
+  { emoji: '🏅', title: 'Топ-10 сезона', done: false },
+  { emoji: '👑', title: 'Победа в сезоне', done: false },
+]

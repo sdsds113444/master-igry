@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Users, ShieldCheck, LogOut } from 'lucide-react'
+import { LayoutDashboard, Users, ShieldCheck, LogOut, BookOpen } from 'lucide-react'
 import Background from './Background'
 import { TEAMS, MY_TEAM_CODE } from '../data/mock'
 
@@ -43,6 +43,14 @@ export default function Layout() {
               }
             >
               <Users size={16} /> <span className="hidden md:inline">Кабинет&nbsp;команды</span>
+            </NavLink>
+            <NavLink
+              to="/rules"
+              className={({ isActive }) =>
+                `${linkBase} ${isActive ? 'bg-alfa text-white shadow' : 'text-ink hover:bg-white/60'}`
+              }
+            >
+              <BookOpen size={16} /> <span className="hidden md:inline">Правила</span>
             </NavLink>
             <NavLink
               to="/admin"

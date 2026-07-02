@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { Trophy, Crown, Flame, Lock, Check, Play, ArrowRight, Medal } from 'lucide-react'
-import { GAMES, TEAMS, FEED, MY_TEAM_CODE, CURRENT_GAME, GAME_VIDEO } from '../data/mock'
+import { GAMES, TEAMS, FEED, MY_TEAM_CODE, CURRENT_GAME, GAME_VIDEO, START_VIDEO } from '../data/mock'
 import Stars from '../components/Stars'
 import VideoModal from '../components/VideoModal'
 
@@ -74,6 +74,12 @@ export default function Board() {
               >
                 <Trophy size={16} /> Смотреть рейтинг
               </a>
+              <button
+                onClick={() => setVideo({ title: 'Стартовый мультик КОЯ', src: START_VIDEO })}
+                className="flex items-center gap-2 rounded-2xl bg-white/70 px-5 py-3 text-sm font-bold text-ink transition-colors hover:bg-white"
+              >
+                <Play size={16} /> Вступление
+              </button>
             </div>
           </div>
 

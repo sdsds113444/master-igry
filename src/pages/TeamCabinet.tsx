@@ -2,21 +2,22 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Play, FileDown, Upload, Send, MessageCircle, Crown, CheckCircle2, Clock, Star,
+  UserPlus, X, MessageSquare,
 } from 'lucide-react'
-import { TEAMS, MY_TEAM_CODE, CURRENT_TASK, GAMES, GAME_VIDEO, GAME_FILE, MENTOR_CONTACT } from '../data/mock'
+import {
+  TEAMS, MY_TEAM_CODE, CURRENT_TASK, GAMES, GAME_VIDEO, GAME_FILE, MENTOR_CONTACT,
+  ROSTER_SEED, TEAM_CHAT_SEED, ACHIEVEMENTS,
+} from '../data/mock'
 import Stars from '../components/Stars'
 import VideoModal from '../components/VideoModal'
-
-const ROSTER = [
-  'Максим К. (капитан)', 'Анна С.', 'Игорь В.', 'Пётр Л.', 'Дарья М.',
-  'Олег Р.', 'Юлия Н.', 'Сергей Ф.', 'Мария Т.', 'Илья Г.',
-]
 
 const diffColor: Record<string, string> = {
   Лёгкий: '#1ea672',
   Средний: '#e8b21e',
   Сложный: '#ef3124',
 }
+
+interface Msg { author: string; text: string; time: string; me: boolean }
 
 export default function TeamCabinet() {
   const me = TEAMS.find((t) => t.code === MY_TEAM_CODE)!
@@ -25,6 +26,27 @@ export default function TeamCabinet() {
   const [sent, setSent] = useState(false)
   const [videoOpen, setVideoOpen] = useState(false)
   const [fileAttached, setFileAttached] = useState<string | null>(null)
+
+  // Состав команды (капитан редактирует)
+  const [roster, setRoster] = useState<string[]>(ROSTER_SEED)
+  const [newPlayer, setNewPlayer] = useState('')
+  function addPlayer(e: React.FormEvent) {
+    e.preventDefault()
+    const name = newPlayer.trim()
+    if (name) setRoster((r) => [...r, name])
+    setNewPlayer('')
+  }
+
+  // Чат команды
+  const [chat, setChat] = useState<Msg[]>(TEAM_CHAT_SEED)
+  const [chatInput, setChatInput] = useState('')
+  function sendMsg(e: React.FormEvent) {
+    e.preventDefault()
+    const text = chatInput.trim()
+    if (!text) return
+    setChat((c) => [...c, { author: 'Вы', text, time: 'только что', me: true }])
+    setChatInput('')
+  }
 
   return (
     <div className="space-y-6">
@@ -58,6 +80,7 @@ export default function TeamCabinet() {
         <div className="flex gap-3">
           <Stat label="Место" value={`#${me.rank}`} />
           <Stat label="Очки" value={me.total} />
+          <Stat label="🪙 Койны" value={me.coins} />
         </div>
         <div className="flex flex-wrap gap-2">
           <a
@@ -78,7 +101,7 @@ export default function TeamCabinet() {
       </motion.div>
 
       <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-        {/* ==== ЗАДАНИЕ НЕДЕЛИ ==== */}
+        {/* ==== ЛЕВАЯ КОЛОНКА ==== */}
         <section className="space-y-4">
           <div className="glass rounded-[28px] p-5">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-alfa">
@@ -128,13 +151,13 @@ export default function TeamCabinet() {
                 transition={{ delay: i * 0.08 }}
                 className="glass lift rounded-3xl p-4"
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/70 text-sm font-extrabold">{i + 1}</span>
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white/70 text-sm font-extrabold">{i + 1}</span>
                     <h3 className="font-display text-[15px] font-extrabold">{c.title}</h3>
                   </div>
                   <span
-                    className="rounded-full px-2.5 py-1 text-[11px] font-bold text-white"
+                    className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold text-white"
                     style={{ background: diffColor[c.difficulty] }}
                   >
                     {c.difficulty}
@@ -185,6 +208,38 @@ export default function TeamCabinet() {
               </>
             )}
           </div>
+
+          {/* Чат команды */}
+          <div className="glass rounded-[28px] p-5">
+            <h3 className="mb-3 flex items-center gap-2 font-display text-lg font-extrabold">
+              <MessageSquare size={18} /> Чат команды
+            </h3>
+            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+              {chat.map((m, i) => (
+                <div key={i} className={`flex ${m.me ? 'justify-end' : ''}`}>
+                  <div className={`max-w-[82%] rounded-2xl px-3 py-2 ${m.me ? 'bg-alfa text-white' : 'bg-white/75'}`}>
+                    {!m.me && <div className="text-[11px] font-bold text-ink-soft">{m.author}</div>}
+                    <div className="text-sm">{m.text}</div>
+                    <div className={`mt-0.5 text-[10px] ${m.me ? 'text-white/70' : 'text-ink-soft/70'}`}>{m.time}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <form onSubmit={sendMsg} className="mt-3 flex gap-2">
+              <input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Написать команде…"
+                className="flex-1 rounded-2xl border border-black/5 bg-white/70 px-4 py-2.5 text-sm outline-none focus:border-alfa/40"
+              />
+              <button type="submit" className="btn-alfa grid h-[42px] w-[42px] shrink-0 place-items-center rounded-2xl">
+                <Send size={16} />
+              </button>
+            </form>
+            <p className="mt-2 text-[11px] text-ink-soft">
+              Демо: сообщения пока не сохраняются. С Supabase здесь будет realtime-чат всей команды.
+            </p>
+          </div>
         </section>
 
         {/* ==== ПРАВАЯ КОЛОНКА ==== */}
@@ -221,45 +276,98 @@ export default function TeamCabinet() {
             </div>
           </div>
 
-          {/* Состав */}
+          {/* Состав — редактирует капитан */}
           <div className="glass rounded-[28px] p-5">
-            <h3 className="mb-3 font-display text-lg font-extrabold">Состав команды</h3>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="font-display text-lg font-extrabold">Состав команды</h3>
+              <span className="rounded-full bg-white/70 px-2.5 py-1 text-xs font-bold text-ink-soft">
+                {roster.length} чел
+              </span>
+            </div>
             <ul className="space-y-1.5">
-              {ROSTER.map((p, i) => (
-                <li key={p} className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 hover:bg-white/50">
-                  <span className="grid h-7 w-7 place-items-center rounded-full bg-white/70 text-xs font-bold">{p.slice(0, 1)}</span>
-                  <span className="text-sm font-semibold">{p}</span>
-                  {i === 0 && <Crown size={15} className="ml-auto" style={{ color: 'var(--color-gold)' }} />}
+              {roster.map((p, i) => (
+                <li key={p + i} className="group flex items-center gap-2.5 rounded-xl px-2 py-1.5 hover:bg-white/50">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/70 text-xs font-bold">{p.slice(0, 1)}</span>
+                  <span className="flex-1 text-sm font-semibold">{p}</span>
+                  {i === 0 ? (
+                    <Crown size={15} style={{ color: 'var(--color-gold)' }} />
+                  ) : (
+                    <button
+                      onClick={() => setRoster((r) => r.filter((_, idx) => idx !== i))}
+                      title="Убрать игрока"
+                      className="grid h-6 w-6 place-items-center rounded-full text-ink-soft opacity-0 transition-opacity hover:bg-alfa/10 hover:text-alfa group-hover:opacity-100"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
+            <form onSubmit={addPlayer} className="mt-3 flex gap-2">
+              <input
+                value={newPlayer}
+                onChange={(e) => setNewPlayer(e.target.value)}
+                placeholder="Имя игрока…"
+                className="flex-1 rounded-xl border border-black/5 bg-white/70 px-3 py-2 text-sm outline-none focus:border-alfa/40"
+              />
+              <button type="submit" className="btn-alfa flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold">
+                <UserPlus size={15} /> Добавить
+              </button>
+            </form>
+            <p className="mt-2 text-[11px] text-ink-soft">Капитан регистрирует состав команды.</p>
           </div>
 
-          {/* История баллов */}
+          {/* Баллы + обратная связь тренера */}
           <div className="glass rounded-[28px] p-5">
-            <h3 className="mb-3 font-display text-lg font-extrabold">Баллы по играм</h3>
-            <div className="space-y-2">
+            <h3 className="mb-3 font-display text-lg font-extrabold">Баллы и обратная связь</h3>
+            <div className="space-y-2.5">
               {GAMES.filter((g) => g.status !== 'locked').map((g) => {
                 const s = me.perGame[g.id]
                 const sum = s.cases + s.bonus + s.superBonus
                 return (
-                  <div key={g.id} className="flex items-center gap-3 rounded-2xl bg-white/50 px-3 py-2">
-                    <span className="text-xl">{g.emoji}</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-bold">{g.title}</div>
-                      <div className="text-[11px] font-semibold text-ink-soft">
-                        кейсы {s.cases}
-                        {s.bonus > 0 && ` · бонус +${s.bonus}`}
-                        {s.superBonus > 0 && ` · супер +${s.superBonus}`}
+                  <div key={g.id} className="rounded-2xl bg-white/50 p-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">{g.emoji}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-bold">{g.title}</div>
+                        <div className="text-[11px] font-semibold text-ink-soft">
+                          кейсы {s.cases}
+                          {s.bonus > 0 && ` · бонус +${s.bonus}`}
+                          {s.superBonus > 0 && ` · супер +${s.superBonus}`}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 font-display text-base font-extrabold">
+                        {sum > 0 ? sum : '—'}
+                        {s.superBonus > 0 && <Star size={13} style={{ color: 'var(--color-gold)' }} fill="currentColor" />}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 font-display text-base font-extrabold">
-                      {sum > 0 ? sum : '—'}
-                      {s.superBonus > 0 && <Star size={13} style={{ color: 'var(--color-gold)' }} fill="currentColor" />}
-                    </div>
+                    {s.feedback && (
+                      <div className="mt-2 flex gap-2 rounded-xl bg-white/70 p-2.5">
+                        <MessageCircle size={14} className="mt-0.5 shrink-0 text-alfa" />
+                        <div className="text-xs text-ink-soft">
+                          <b className="text-ink">ОС тренера:</b> {s.feedback}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               })}
+            </div>
+          </div>
+
+          {/* Ачивки */}
+          <div className="glass rounded-[28px] p-5">
+            <h3 className="mb-3 font-display text-lg font-extrabold">Ачивки</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {ACHIEVEMENTS.map((a) => (
+                <div
+                  key={a.title}
+                  className={`flex items-center gap-2 rounded-2xl px-3 py-2 ${a.done ? 'bg-white/70' : 'bg-white/30 opacity-50'}`}
+                >
+                  <span className="text-xl">{a.emoji}</span>
+                  <span className="text-xs font-bold leading-tight">{a.title}</span>
+                </div>
+              ))}
             </div>
           </div>
         </aside>
