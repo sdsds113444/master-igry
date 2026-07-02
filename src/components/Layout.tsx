@@ -26,7 +26,7 @@ export default function Layout() {
             <img src="/koya-favicon.svg" alt="КОЯ" className="h-9 w-9 drop-shadow" />
             <div className="hidden leading-tight sm:block">
               <div className="font-display text-[15px] font-extrabold tracking-tight">
-                Мастер игры
+                Герои на линии
               </div>
               <div className="text-[11px] font-semibold text-ink-soft">Альфа · КЦ</div>
             </div>

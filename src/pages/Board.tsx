@@ -12,6 +12,14 @@ const fadeUp = {
   show: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.06, duration: 0.5 } }),
 }
 
+// Тематические образы КОЯ по играм (кадры из мультиков). Нет образа → градиент+эмодзи.
+const GAME_IMAGE: Record<string, string> = {
+  detective: '/koya/game-detective.jpg',
+  noforward: '/koya/game-noforward.jpg',
+  iknow: '/koya/game-iknow.jpg',
+  onecall: '/koya/game-onecall.jpg',
+}
+
 export default function Board() {
   const [rating, setRating] = useState<RatingRow[] | null>(null)
   const [myTeam, setMyTeam] = useState<TeamInfo | null>(null)
@@ -153,27 +161,44 @@ export default function Board() {
               initial="hidden"
               animate="show"
               onClick={g.status !== 'locked' ? () => setVideo({ title: 'Мультик — ' + g.title, src: GAME_VIDEO[g.id] }) : undefined}
-              className={`glass lift min-w-[190px] flex-1 rounded-3xl p-4 ${
+              className={`glass lift min-w-[210px] flex-1 overflow-hidden rounded-3xl ${
                 g.status === 'locked' ? 'opacity-60' : 'cursor-pointer'
               }`}
               style={g.status === 'current' ? { boxShadow: `0 0 0 2px ${g.accent}, 0 16px 40px -16px ${g.accent}` } : {}}
             >
-              <div className="flex items-center justify-between">
-                <span className="grid h-11 w-11 place-items-center rounded-2xl text-2xl" style={{ background: `${g.accent}1a` }}>
-                  {g.emoji}
-                </span>
-                <StatusBadge status={g.status} />
-              </div>
-              <div className="mt-3 text-[11px] font-bold uppercase tracking-wide text-ink-soft">
-                Игра {g.num} · Неделя {g.week}
-              </div>
-              <div className="font-display text-[15px] font-extrabold leading-tight">{g.title}</div>
-              <p className="mt-1 line-clamp-2 text-xs text-ink-soft">{g.skill}</p>
-              {g.status !== 'locked' && (
-                <div className="mt-2 flex items-center gap-1 text-[11px] font-bold" style={{ color: g.accent }}>
-                  <Play size={11} fill="currentColor" /> Смотреть мультик
+              {/* Баннер: образ КОЯ или градиент с эмодзи */}
+              <div className="relative h-24 w-full overflow-hidden">
+                {GAME_IMAGE[g.id] ? (
+                  <img
+                    src={GAME_IMAGE[g.id]}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                    style={{ objectPosition: 'center 32%' }}
+                  />
+                ) : (
+                  <div
+                    className="absolute inset-0 grid place-items-center text-5xl"
+                    style={{ background: `linear-gradient(135deg, ${g.accent}2e, ${g.accent}0a)` }}
+                  >
+                    {g.emoji}
+                  </div>
+                )}
+                <div className="absolute right-2 top-2">
+                  <StatusBadge status={g.status} />
                 </div>
-              )}
+              </div>
+              <div className="p-4">
+                <div className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">
+                  Игра {g.num} · Неделя {g.week}
+                </div>
+                <div className="font-display text-[15px] font-extrabold leading-tight">{g.title}</div>
+                <p className="mt-1 line-clamp-2 text-xs text-ink-soft">{g.skill}</p>
+                {g.status !== 'locked' && (
+                  <div className="mt-2 flex items-center gap-1 text-[11px] font-bold" style={{ color: g.accent }}>
+                    <Play size={11} fill="currentColor" /> Смотреть мультик
+                  </div>
+                )}
+              </div>
             </motion.div>
           ))}
         </div>

@@ -319,7 +319,7 @@ on conflict do nothing;
 -- 8. ДЕМО-КОМАНДА + АДМИН-КОД (для теста; в бою заменить, см. блок ниже)
 -- ---------------------------------------------------------------------------
 insert into public.teams (code, name, site, mentor, hue, coins)
-  values ('KOYA-04', 'Эмпаты', 'Владимир', 'Ж. Бикулева', 210, 90)
+  values ('KOYA-04', 'Эмпаты', 'Владимир', 'Иванов Иван', 210, 90)
   on conflict (code) do nothing;
 
 insert into public.admin_codes (code, label) values ('ADMIN-DEMO-9F3A', 'Демо-админ')

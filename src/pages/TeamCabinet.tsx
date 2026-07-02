@@ -5,7 +5,7 @@ import {
   UserPlus, X, MessageSquare, Loader2,
 } from 'lucide-react'
 import {
-  CURRENT_TASK, GAMES, GAME_VIDEO, GAME_FILE, MENTOR_CONTACT, ACHIEVEMENTS,
+  CURRENT_TASK, GAMES, GAME_VIDEO, GAME_FILE, MENTOR_CONTACT,
   type TeamScore, type CaseItem,
 } from '../data/mock'
 import {
@@ -457,22 +457,6 @@ export default function TeamCabinet() {
                   </div>
                 )
               })}
-            </div>
-          </div>
-
-          {/* Ачивки */}
-          <div className="glass rounded-[28px] p-5">
-            <h3 className="mb-3 font-display text-lg font-extrabold">Ачивки</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {ACHIEVEMENTS.map((a) => (
-                <div
-                  key={a.title}
-                  className={`flex items-center gap-2 rounded-2xl px-3 py-2 ${a.done ? 'bg-white/70' : 'bg-white/30 opacity-50'}`}
-                >
-                  <span className="text-xl">{a.emoji}</span>
-                  <span className="text-xs font-bold leading-tight">{a.title}</span>
-                </div>
-              ))}
             </div>
           </div>
         </aside>

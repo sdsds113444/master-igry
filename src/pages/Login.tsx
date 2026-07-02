@@ -49,7 +49,7 @@ export default function Login() {
                 Сезон 1 · 7 игр · 9 недель
               </div>
               <p className="mt-1 text-xs text-white/80">
-                Командный чемпионат контакт-центра. Решай кейсы, набирай очки, стань «Мастером игры».
+                Командный чемпионат контакт-центра. Решай кейсы, набирай очки, стань героем линии.
               </p>
             </div>
           </div>
@@ -59,7 +59,7 @@ export default function Login() {
         <div className="flex flex-col justify-center p-8 sm:p-10">
           <img src="/koya-favicon.svg" alt="" className="mb-4 h-12 w-12" />
           <h1 className="font-display text-3xl font-extrabold leading-tight">
-            <span className="text-gradient">Мастер игры</span>
+            Герои <span className="text-gradient">на линии</span>
           </h1>
           <p className="mt-2 text-sm text-ink-soft">
             Вход для команды. Введите код команды — его выдаёт организатор.
