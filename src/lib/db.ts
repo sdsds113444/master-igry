@@ -1,23 +1,27 @@
 // src/lib/db.ts
 // Тонкий слой данных. Страницы вызывают ТОЛЬКО эти функции и не знают про supabase/мок.
 // Каждая функция ветвится по isSupabaseConfigured:
-//   false → демо-данные (src/data/mock.ts) — поведение как сейчас, ничего не ломается.
+//   false → демо-данные (src/data/mock.ts) — поведение как раньше, ничего не ломается.
 //   true  → живая база Supabase (анонимный вход + привязка к команде по коду).
 // Все функции async, чтобы сигнатуры не менялись при переключении режима.
 
 import { isSupabaseConfigured, supabase, requireClient } from './supabase'
 import {
-  TEAMS, ROSTER_SEED, TEAM_CHAT_SEED, GAMES, CURRENT_GAME,
-  type TeamScore,
+  TEAMS, GAMES, CURRENT_TASK, ROSTER_SEED, TEAM_CHAT_SEED,
+  type TeamScore, type CaseItem,
 } from '../data/mock'
 
-export type Role = 'player' | 'captain' | 'admin'
-export interface Session { teamId: string | null; code: string; role: Role; name: string }
+export type Role = 'player' | 'admin'
+export interface Session { teamId: string | null; code: string; role: Role; name: string; hue: number }
 export interface ChatMsg { id: string; author: string; text: string; time: string; me: boolean }
 export interface RatingRow { id: string; rank: number; name: string; site: string; hue: number; total: number }
 export interface TeamInfo {
   id: string; code: string; name: string; site: string; mentor: string; hue: number; coins: number
 }
+export interface AdminTeamRow { id: string; code: string; name: string; site: string; hue: number }
+export interface GradeRow { cases: number; bonus: number; superBonus: number; fcr: number; feedback: string }
+
+const MOCK_ADMIN_CODE = 'ADMIN-DEMO-9F3A'
 
 // ---------- локальная «сессия» (какая команда сейчас вошла) ----------
 const SESSION_KEY = 'mi.session'
@@ -35,10 +39,20 @@ export async function signOut() {
   if (isSupabaseConfigured && supabase) await supabase.auth.signOut()
 }
 
+// ---------- имя, под которым человек пишет в чате (косметика, не защита) ----------
+const NAME_KEY = 'mi.displayName'
+export function getDisplayName(): string | null {
+  return localStorage.getItem(NAME_KEY)
+}
+export function setDisplayName(name: string) {
+  localStorage.setItem(NAME_KEY, name.trim())
+}
+
 // ---------- мок-хранилище в памяти (чтобы add/remove/send «жили» в демо) ----------
 const mockRoster: Record<string, string[]> = {}
 const mockChat: Record<string, ChatMsg[]> = {}
 const mockSubs: Record<string, ((m: ChatMsg) => void)[]> = {}
+const mockSubmissions: Record<string, { answer: string; fileName: string | null }> = {}
 
 // ---------- анонимная сессия Supabase (нужна до redeem_code) ----------
 async function ensureAnon() {
@@ -54,9 +68,14 @@ export async function signInByCode(code: string): Promise<Session | null> {
   const norm = code.trim().toUpperCase()
 
   if (!isSupabaseConfigured) {
+    if (norm === MOCK_ADMIN_CODE) {
+      const s: Session = { teamId: null, code: norm, role: 'admin', name: 'Админ', hue: 0 }
+      setSession(s)
+      return s
+    }
     const t = TEAMS.find((x) => x.code === norm)
     if (!t) return null
-    const s: Session = { teamId: t.id, code: t.code, role: 'player', name: t.name }
+    const s: Session = { teamId: t.id, code: t.code, role: 'player', name: t.name, hue: t.hue }
     setSession(s)
     return s
   }
@@ -69,8 +88,8 @@ export async function signInByCode(code: string): Promise<Session | null> {
   const res = data as { role: Role; team?: TeamInfo }
   const s: Session =
     res.role === 'admin'
-      ? { teamId: null, code: norm, role: 'admin', name: 'Админ' }
-      : { teamId: res.team!.id, code: res.team!.code, role: 'player', name: res.team!.name }
+      ? { teamId: null, code: norm, role: 'admin', name: 'Админ', hue: 0 }
+      : { teamId: res.team!.id, code: res.team!.code, role: 'player', name: res.team!.name, hue: res.team!.hue }
   setSession(s)
   return s
 }
@@ -128,11 +147,11 @@ function hhmm(iso: string): string {
 }
 
 export async function listMessages(teamId: string): Promise<ChatMsg[]> {
+  const meName = getDisplayName()
   if (!isSupabaseConfigured) {
     return mockChat[teamId] ?? (mockChat[teamId] = TEAM_CHAT_SEED.map((m, i) => ({ id: 's' + i, ...m })))
   }
   const sb = requireClient()
-  const meName = getSession()?.name
   const { data } = await sb.from('messages').select('*').eq('team_id', teamId).order('created_at')
   return (data ?? []).map((m) => ({
     id: m.id as string,
@@ -147,7 +166,7 @@ export async function sendMessage(teamId: string, author: string, text: string):
   const t = text.trim()
   if (!t) return
   if (!isSupabaseConfigured) {
-    const msg: ChatMsg = { id: 'm' + Date.now(), author, text: t, time: 'только что', me: true }
+    const msg: ChatMsg = { id: 'm' + Math.random().toString(36).slice(2), author, text: t, time: 'только что', me: true }
     ;(mockChat[teamId] ??= []).push(msg)
     ;(mockSubs[teamId] ?? []).forEach((cb) => cb(msg))
     return
@@ -166,7 +185,6 @@ export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void): 
     }
   }
   const sb = requireClient()
-  const meName = getSession()?.name
   const ch = sb
     .channel('team-chat-' + teamId)
     .on(
@@ -174,7 +192,7 @@ export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void): 
       { event: 'INSERT', schema: 'public', table: 'messages', filter: `team_id=eq.${teamId}` },
       (payload) => {
         const m = payload.new as { id: string; author: string; text: string; created_at: string }
-        onMsg({ id: m.id, author: m.author, text: m.text, time: hhmm(m.created_at), me: m.author === meName })
+        onMsg({ id: m.id, author: m.author, text: m.text, time: hhmm(m.created_at), me: m.author === getDisplayName() })
       },
     )
     .subscribe()
@@ -183,6 +201,23 @@ export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void): 
       sb.removeChannel(ch)
     },
   }
+}
+
+// =====================================================================
+// КЕЙСЫ ИГРЫ
+// =====================================================================
+export async function getCases(gameId: string): Promise<CaseItem[]> {
+  if (!isSupabaseConfigured) {
+    return gameId === CURRENT_TASK.gameId ? CURRENT_TASK.cases : []
+  }
+  const sb = requireClient()
+  const { data } = await sb.from('cases').select('id, title, difficulty, body').eq('game_id', gameId).order('ord')
+  return (data ?? []).map((c) => ({
+    id: c.id as string,
+    title: c.title as string,
+    difficulty: c.difficulty as CaseItem['difficulty'],
+    text: c.body as string,
+  }))
 }
 
 // =====================================================================
@@ -207,9 +242,21 @@ export async function getScores(teamId: string): Promise<Record<string, TeamScor
   return out
 }
 
+export async function getSubmission(teamId: string, gameId: string): Promise<{ answer: string; fileName: string | null } | null> {
+  if (!isSupabaseConfigured) {
+    return mockSubmissions[`${teamId}:${gameId}`] ?? null
+  }
+  const sb = requireClient()
+  const { data } = await sb.from('answers').select('text, file_url').eq('team_id', teamId).eq('game_id', gameId).maybeSingle()
+  return data ? { answer: (data.text as string) ?? '', fileName: (data.file_url as string) ?? null } : null
+}
+
 export interface SubmitInput { teamId: string; gameId: string; answer: string; fileName?: string | null }
 export async function submitAnswer(input: SubmitInput): Promise<void> {
-  if (!isSupabaseConfigured) return
+  if (!isSupabaseConfigured) {
+    mockSubmissions[`${input.teamId}:${input.gameId}`] = { answer: input.answer, fileName: input.fileName ?? null }
+    return
+  }
   await requireClient().from('answers').upsert(
     { team_id: input.teamId, game_id: input.gameId, text: input.answer, file_url: input.fileName ?? null },
     { onConflict: 'team_id,game_id' },
@@ -243,5 +290,37 @@ export async function listTeamsRating(): Promise<RatingRow[]> {
   }))
 }
 
-export function getCurrentGame() { return CURRENT_GAME }
+// =====================================================================
+// АДМИНКА
+// =====================================================================
+export async function listAllTeamsAdmin(): Promise<AdminTeamRow[]> {
+  if (!isSupabaseConfigured) {
+    return TEAMS.map((t) => ({ id: t.id, code: t.code, name: t.name, site: t.site, hue: t.hue }))
+  }
+  const sb = requireClient()
+  const { data } = await sb.from('teams').select('id, code, name, site, hue').order('name')
+  return (data as AdminTeamRow[]) ?? []
+}
+
+export async function getScoresForGame(gameId: string): Promise<Record<string, GradeRow>> {
+  if (!isSupabaseConfigured) {
+    const out: Record<string, GradeRow> = {}
+    for (const t of TEAMS) {
+      const s = t.perGame[gameId]
+      if (s) out[t.id] = { cases: s.cases, bonus: s.bonus, superBonus: s.superBonus, fcr: s.fcr, feedback: s.feedback ?? '' }
+    }
+    return out
+  }
+  const sb = requireClient()
+  const { data } = await sb.from('scores').select('*').eq('game_id', gameId)
+  const out: Record<string, GradeRow> = {}
+  for (const r of data ?? []) {
+    out[r.team_id as string] = {
+      cases: r.cases as number, bonus: r.bonus as number, superBonus: r.super_bonus as number,
+      fcr: r.fcr as number, feedback: (r.feedback as string) ?? '',
+    }
+  }
+  return out
+}
+
 export function getGames() { return GAMES }

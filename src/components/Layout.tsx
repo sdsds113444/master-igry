@@ -1,14 +1,19 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Users, ShieldCheck, LogOut, BookOpen } from 'lucide-react'
 import Background from './Background'
-import { TEAMS, MY_TEAM_CODE } from '../data/mock'
+import { getSession, signOut } from '../lib/db'
 
 const linkBase =
   'flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors'
 
 export default function Layout() {
   const navigate = useNavigate()
-  const myTeam = TEAMS.find((t) => t.code === MY_TEAM_CODE)
+  const session = getSession()
+
+  async function handleSignOut() {
+    await signOut()
+    navigate('/')
+  }
 
   return (
     <div className="min-h-full">
@@ -28,57 +33,63 @@ export default function Layout() {
           </div>
 
           <div className="mx-auto flex items-center gap-1">
-            <NavLink
-              to="/board"
-              className={({ isActive }) =>
-                `${linkBase} ${isActive ? 'bg-alfa text-white shadow' : 'text-ink hover:bg-white/60'}`
-              }
-            >
-              <LayoutDashboard size={16} /> <span className="hidden md:inline">Доска</span>
-            </NavLink>
-            <NavLink
-              to="/team"
-              className={({ isActive }) =>
-                `${linkBase} ${isActive ? 'bg-alfa text-white shadow' : 'text-ink hover:bg-white/60'}`
-              }
-            >
-              <Users size={16} /> <span className="hidden md:inline">Кабинет&nbsp;команды</span>
-            </NavLink>
-            <NavLink
-              to="/rules"
-              className={({ isActive }) =>
-                `${linkBase} ${isActive ? 'bg-alfa text-white shadow' : 'text-ink hover:bg-white/60'}`
-              }
-            >
-              <BookOpen size={16} /> <span className="hidden md:inline">Правила</span>
-            </NavLink>
-            <NavLink
-              to="/admin"
-              className={({ isActive }) =>
-                `${linkBase} ${isActive ? 'bg-alfa text-white shadow' : 'text-ink hover:bg-white/60'}`
-              }
-            >
-              <ShieldCheck size={16} /> <span className="hidden md:inline">Админ</span>
-            </NavLink>
+            {session?.role !== 'admin' && (
+              <>
+                <NavLink
+                  to="/board"
+                  className={({ isActive }) =>
+                    `${linkBase} ${isActive ? 'bg-alfa text-white shadow' : 'text-ink hover:bg-white/60'}`
+                  }
+                >
+                  <LayoutDashboard size={16} /> <span className="hidden md:inline">Доска</span>
+                </NavLink>
+                <NavLink
+                  to="/team"
+                  className={({ isActive }) =>
+                    `${linkBase} ${isActive ? 'bg-alfa text-white shadow' : 'text-ink hover:bg-white/60'}`
+                  }
+                >
+                  <Users size={16} /> <span className="hidden md:inline">Кабинет&nbsp;команды</span>
+                </NavLink>
+                <NavLink
+                  to="/rules"
+                  className={({ isActive }) =>
+                    `${linkBase} ${isActive ? 'bg-alfa text-white shadow' : 'text-ink hover:bg-white/60'}`
+                  }
+                >
+                  <BookOpen size={16} /> <span className="hidden md:inline">Правила</span>
+                </NavLink>
+              </>
+            )}
+            {session?.role === 'admin' && (
+              <NavLink
+                to="/admin"
+                className={({ isActive }) =>
+                  `${linkBase} ${isActive ? 'bg-alfa text-white shadow' : 'text-ink hover:bg-white/60'}`
+                }
+              >
+                <ShieldCheck size={16} /> <span className="hidden md:inline">Админ</span>
+              </NavLink>
+            )}
           </div>
 
           <div className="flex items-center gap-2 pr-1">
-            {myTeam && (
+            {session && session.role !== 'admin' && (
               <div className="hidden items-center gap-2 rounded-full bg-white/60 px-3 py-1.5 sm:flex">
                 <span
                   className="grid h-7 w-7 place-items-center rounded-full text-xs font-extrabold text-white"
-                  style={{ background: `hsl(${myTeam.hue} 70% 55%)` }}
+                  style={{ background: `hsl(${session.hue} 70% 55%)` }}
                 >
-                  {myTeam.name.slice(0, 1)}
+                  {session.name.slice(0, 1)}
                 </span>
                 <div className="leading-tight">
-                  <div className="text-[12px] font-bold">{myTeam.name}</div>
-                  <div className="text-[10px] font-semibold text-ink-soft">{myTeam.code}</div>
+                  <div className="text-[12px] font-bold">{session.name}</div>
+                  <div className="text-[10px] font-semibold text-ink-soft">{session.code}</div>
                 </div>
               </div>
             )}
             <button
-              onClick={() => navigate('/')}
+              onClick={handleSignOut}
               title="Выйти"
               className="grid h-9 w-9 place-items-center rounded-full bg-white/60 text-ink-soft transition-colors hover:bg-white hover:text-alfa"
             >

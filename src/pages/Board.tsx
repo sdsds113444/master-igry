@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { Trophy, Crown, Flame, Lock, Check, Play, ArrowRight, Medal } from 'lucide-react'
-import { GAMES, TEAMS, FEED, MY_TEAM_CODE, CURRENT_GAME, GAME_VIDEO, START_VIDEO } from '../data/mock'
+import { Trophy, Crown, Flame, Lock, Check, Play, ArrowRight, Medal, Loader2 } from 'lucide-react'
+import { GAMES, FEED, CURRENT_GAME, GAME_VIDEO, START_VIDEO } from '../data/mock'
+import { getMyTeam, listTeamsRating, type RatingRow, type TeamInfo } from '../lib/db'
 import Stars from '../components/Stars'
 import VideoModal from '../components/VideoModal'
 
@@ -12,11 +13,27 @@ const fadeUp = {
 }
 
 export default function Board() {
-  const myTeam = TEAMS.find((t) => t.code === MY_TEAM_CODE)!
-  const myRank = myTeam.rank ?? 1
-  const doneCount = GAMES.filter((g) => g.status === 'done').length
-  const heroStars = 3 + (Math.max(0, 30 - myRank) / 30) * 2 // 3..5
+  const [rating, setRating] = useState<RatingRow[] | null>(null)
+  const [myTeam, setMyTeam] = useState<TeamInfo | null>(null)
   const [video, setVideo] = useState<{ title: string; src: string } | null>(null)
+
+  useEffect(() => {
+    listTeamsRating().then(setRating)
+    getMyTeam().then(setMyTeam)
+  }, [])
+
+  const doneCount = GAMES.filter((g) => g.status === 'done').length
+  const myRating = rating?.find((r) => r.id === myTeam?.id)
+  const myRank = myRating?.rank ?? 1
+  const heroStars = 3 + (Math.max(0, 30 - myRank) / 30) * 2 // 3..5
+
+  if (!rating) {
+    return (
+      <div className="grid min-h-[40vh] place-items-center text-ink-soft">
+        <Loader2 className="animate-spin" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -104,18 +121,20 @@ export default function Board() {
                 {['🪙', '⭐', '🐾'][i % 3]}
               </span>
             ))}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ delay: 0.5, type: 'spring', stiffness: 120 }}
-              className="glass-dark absolute right-4 top-4 rounded-2xl px-4 py-3"
-            >
-              <div className="text-[11px] font-bold uppercase tracking-wider text-white/70">
-                Рейтинг героя
-              </div>
-              <div className="my-1"><Stars value={heroStars} size={20} /></div>
-              <div className="font-display text-2xl font-extrabold">{heroStars.toFixed(1)}</div>
-            </motion.div>
+            {myTeam && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ delay: 0.5, type: 'spring', stiffness: 120 }}
+                className="glass-dark absolute right-4 top-4 rounded-2xl px-4 py-3"
+              >
+                <div className="text-[11px] font-bold uppercase tracking-wider text-white/70">
+                  Рейтинг героя
+                </div>
+                <div className="my-1"><Stars value={heroStars} size={20} /></div>
+                <div className="font-display text-2xl font-extrabold">{heroStars.toFixed(1)}</div>
+              </motion.div>
+            )}
           </div>
         </div>
       </motion.section>
@@ -207,14 +226,14 @@ export default function Board() {
             🏆 Рейтинг команд
           </h2>
           <div className="glass-strong rounded-3xl p-3">
-            {TEAMS.slice(0, 8).map((t, i) => (
-              <RatingRow key={t.id} rank={i + 1} name={t.name} site={t.site} total={t.total} hue={t.hue} me={t.code === MY_TEAM_CODE} />
+            {rating.slice(0, 8).map((t) => (
+              <RatingRowView key={t.id} rank={t.rank} name={t.name} site={t.site} total={t.total} hue={t.hue} me={t.id === myTeam?.id} />
             ))}
 
-            {myRank > 8 && (
+            {myRating && myRating.rank > 8 && (
               <>
                 <div className="my-1 text-center text-xs text-ink-soft">· · ·</div>
-                <RatingRow rank={myRank} name={myTeam.name} site={myTeam.site} total={myTeam.total} hue={myTeam.hue} me />
+                <RatingRowView rank={myRating.rank} name={myRating.name} site={myRating.site} total={myRating.total} hue={myRating.hue} me />
               </>
             )}
 
@@ -251,7 +270,7 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-function RatingRow({
+function RatingRowView({
   rank, name, site, total, hue, me,
 }: { rank: number; name: string; site: string; total: number; hue: number; me?: boolean }) {
   const medal = rank <= 3

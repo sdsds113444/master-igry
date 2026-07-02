@@ -1,13 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Play, FileDown, Upload, Send, MessageCircle, Crown, CheckCircle2, Clock, Star,
-  UserPlus, X, MessageSquare,
+  UserPlus, X, MessageSquare, Loader2,
 } from 'lucide-react'
 import {
-  TEAMS, MY_TEAM_CODE, CURRENT_TASK, GAMES, GAME_VIDEO, GAME_FILE, MENTOR_CONTACT,
-  ROSTER_SEED, TEAM_CHAT_SEED, ACHIEVEMENTS,
+  CURRENT_TASK, GAMES, GAME_VIDEO, GAME_FILE, MENTOR_CONTACT, ACHIEVEMENTS,
+  type TeamScore, type CaseItem,
 } from '../data/mock'
+import {
+  getMyTeam, listTeamsRating, getRoster, addPlayer as dbAddPlayer, removePlayer as dbRemovePlayer,
+  getCases, getScores, getSubmission, submitAnswer,
+  listMessages, sendMessage, subscribeMessages, getDisplayName, setDisplayName,
+  type TeamInfo, type ChatMsg,
+} from '../lib/db'
 import Stars from '../components/Stars'
 import VideoModal from '../components/VideoModal'
 
@@ -17,35 +23,117 @@ const diffColor: Record<string, string> = {
   Сложный: '#ef3124',
 }
 
-interface Msg { author: string; text: string; time: string; me: boolean }
-
 export default function TeamCabinet() {
-  const me = TEAMS.find((t) => t.code === MY_TEAM_CODE)!
-  const heroStars = 3 + (Math.max(0, 30 - (me.rank ?? 1)) / 30) * 2
+  const [me, setMe] = useState<TeamInfo | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [rank, setRank] = useState(1)
+  const [total, setTotal] = useState(0)
+
+  const [videoOpen, setVideoOpen] = useState(false)
+
+  const [cases, setCases] = useState<CaseItem[]>([])
+  const [scores, setScores] = useState<Record<string, TeamScore>>({})
+
   const [answer, setAnswer] = useState('')
   const [sent, setSent] = useState(false)
-  const [videoOpen, setVideoOpen] = useState(false)
   const [fileAttached, setFileAttached] = useState<string | null>(null)
 
-  // Состав команды (капитан редактирует)
-  const [roster, setRoster] = useState<string[]>(ROSTER_SEED)
+  const [roster, setRoster] = useState<string[]>([])
   const [newPlayer, setNewPlayer] = useState('')
-  function addPlayer(e: React.FormEvent) {
+
+  const [chat, setChat] = useState<ChatMsg[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [myName, setMyName] = useState(getDisplayName() ?? '')
+  const nameConfirmed = !!getDisplayName()
+
+  useEffect(() => {
+    let unsub: { unsubscribe(): void } | null = null
+
+    async function load() {
+      const team = await getMyTeam()
+      setMe(team)
+      if (!team) { setLoading(false); return }
+
+      const [rating, r, c, s, sub, msgs] = await Promise.all([
+        listTeamsRating(),
+        getRoster(team.id),
+        getCases(CURRENT_TASK.gameId),
+        getScores(team.id),
+        getSubmission(team.id, CURRENT_TASK.gameId),
+        listMessages(team.id),
+      ])
+
+      const mine = rating.find((x) => x.id === team.id)
+      setRank(mine?.rank ?? 1)
+      setTotal(mine?.total ?? 0)
+      setRoster(r)
+      setCases(c)
+      setScores(s)
+      if (sub) { setAnswer(sub.answer); setFileAttached(sub.fileName); setSent(true) }
+      setChat(msgs)
+      setLoading(false)
+
+      unsub = subscribeMessages(team.id, (m) => setChat((c) => [...c, m]))
+    }
+    load()
+
+    return () => unsub?.unsubscribe()
+  }, [])
+
+  const heroStars = 3 + (Math.max(0, 30 - rank) / 30) * 2
+
+  function saveName(e: React.FormEvent) {
     e.preventDefault()
-    const name = newPlayer.trim()
-    if (name) setRoster((r) => [...r, name])
-    setNewPlayer('')
+    const n = myName.trim()
+    if (!n) return
+    setDisplayName(n)
+    setMyName(n)
   }
 
-  // Чат команды
-  const [chat, setChat] = useState<Msg[]>(TEAM_CHAT_SEED)
-  const [chatInput, setChatInput] = useState('')
-  function sendMsg(e: React.FormEvent) {
+  async function addPlayer(e: React.FormEvent) {
+    e.preventDefault()
+    const name = newPlayer.trim()
+    if (!name || !me) return
+    setRoster((r) => [...r, name])
+    setNewPlayer('')
+    await dbAddPlayer(me.id, name)
+  }
+
+  async function removePlayer(name: string) {
+    if (!me) return
+    setRoster((r) => r.filter((p) => p !== name))
+    await dbRemovePlayer(me.id, name)
+  }
+
+  async function sendMsg(e: React.FormEvent) {
     e.preventDefault()
     const text = chatInput.trim()
-    if (!text) return
-    setChat((c) => [...c, { author: 'Вы', text, time: 'только что', me: true }])
+    if (!text || !me) return
     setChatInput('')
+    await sendMessage(me.id, getDisplayName() ?? me.name, text)
+  }
+
+  async function sendAnswer() {
+    if (!me) return
+    setSent(true)
+    await submitAnswer({ teamId: me.id, gameId: CURRENT_TASK.gameId, answer, fileName: fileAttached })
+  }
+
+  if (loading) {
+    return (
+      <div className="grid min-h-[40vh] place-items-center text-ink-soft">
+        <Loader2 className="animate-spin" />
+      </div>
+    )
+  }
+
+  if (!me) {
+    return (
+      <div className="glass rounded-[28px] p-8 text-center">
+        <p className="font-display text-lg font-extrabold">Эта страница только для команд</p>
+        <p className="mt-1 text-sm text-ink-soft">Вы вошли как администратор — у вас нет своего кабинета команды.</p>
+      </div>
+    )
   }
 
   return (
@@ -78,8 +166,8 @@ export default function TeamCabinet() {
           </div>
         </div>
         <div className="flex gap-3">
-          <Stat label="Место" value={`#${me.rank}`} />
-          <Stat label="Очки" value={me.total} />
+          <Stat label="Место" value={`#${rank}`} />
+          <Stat label="Очки" value={total} />
           <Stat label="🪙 Койны" value={me.coins} />
         </div>
         <div className="flex flex-wrap gap-2">
@@ -143,7 +231,7 @@ export default function TeamCabinet() {
 
           {/* Кейсы */}
           <div className="space-y-3">
-            {CURRENT_TASK.cases.map((c, i) => (
+            {cases.map((c, i) => (
               <motion.div
                 key={c.id}
                 initial={{ opacity: 0, y: 12 }}
@@ -199,7 +287,7 @@ export default function TeamCabinet() {
                     />
                   </label>
                   <button
-                    onClick={() => setSent(true)}
+                    onClick={sendAnswer}
                     className="btn-alfa ml-auto flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-bold"
                   >
                     <Send size={16} /> Отправить тренеру
@@ -215,8 +303,8 @@ export default function TeamCabinet() {
               <MessageSquare size={18} /> Чат команды
             </h3>
             <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-              {chat.map((m, i) => (
-                <div key={i} className={`flex ${m.me ? 'justify-end' : ''}`}>
+              {chat.map((m) => (
+                <div key={m.id} className={`flex ${m.me ? 'justify-end' : ''}`}>
                   <div className={`max-w-[82%] rounded-2xl px-3 py-2 ${m.me ? 'bg-alfa text-white' : 'bg-white/75'}`}>
                     {!m.me && <div className="text-[11px] font-bold text-ink-soft">{m.author}</div>}
                     <div className="text-sm">{m.text}</div>
@@ -224,20 +312,36 @@ export default function TeamCabinet() {
                   </div>
                 </div>
               ))}
+              {chat.length === 0 && <p className="py-3 text-center text-xs text-ink-soft">Пока пусто — напишите первыми.</p>}
             </div>
-            <form onSubmit={sendMsg} className="mt-3 flex gap-2">
-              <input
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Написать команде…"
-                className="flex-1 rounded-2xl border border-black/5 bg-white/70 px-4 py-2.5 text-sm outline-none focus:border-alfa/40"
-              />
-              <button type="submit" className="btn-alfa grid h-[42px] w-[42px] shrink-0 place-items-center rounded-2xl">
-                <Send size={16} />
-              </button>
-            </form>
+
+            {!nameConfirmed ? (
+              <form onSubmit={saveName} className="mt-3 flex gap-2">
+                <input
+                  value={myName}
+                  onChange={(e) => setMyName(e.target.value)}
+                  placeholder="Как вас называть в чате?"
+                  className="flex-1 rounded-2xl border border-black/5 bg-white/70 px-4 py-2.5 text-sm outline-none focus:border-alfa/40"
+                />
+                <button type="submit" className="btn-alfa rounded-2xl px-4 py-2.5 text-sm font-bold">Ок</button>
+              </form>
+            ) : (
+              <form onSubmit={sendMsg} className="mt-3 flex gap-2">
+                <input
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Написать команде…"
+                  className="flex-1 rounded-2xl border border-black/5 bg-white/70 px-4 py-2.5 text-sm outline-none focus:border-alfa/40"
+                />
+                <button type="submit" className="btn-alfa grid h-[42px] w-[42px] shrink-0 place-items-center rounded-2xl">
+                  <Send size={16} />
+                </button>
+              </form>
+            )}
             <p className="mt-2 text-[11px] text-ink-soft">
-              Демо: сообщения пока не сохраняются. С Supabase здесь будет realtime-чат всей команды.
+              {nameConfirmed
+                ? <>Вы пишете как <b>{getDisplayName()}</b>. Видно только вашей команде.</>
+                : 'Имя видно только вашей команде — это не логин, просто подпись сообщений.'}
             </p>
           </div>
         </section>
@@ -270,13 +374,13 @@ export default function TeamCabinet() {
                   {heroStars.toFixed(1)}
                 </div>
                 <div className="mt-1 text-xs font-semibold text-ink-soft">
-                  #{me.rank} место из 30
+                  #{rank} место из 30
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Состав — редактирует капитан */}
+          {/* Состав */}
           <div className="glass rounded-[28px] p-5">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-display text-lg font-extrabold">Состав команды</h3>
@@ -293,7 +397,7 @@ export default function TeamCabinet() {
                     <Crown size={15} style={{ color: 'var(--color-gold)' }} />
                   ) : (
                     <button
-                      onClick={() => setRoster((r) => r.filter((_, idx) => idx !== i))}
+                      onClick={() => removePlayer(p)}
                       title="Убрать игрока"
                       className="grid h-6 w-6 place-items-center rounded-full text-ink-soft opacity-0 transition-opacity hover:bg-alfa/10 hover:text-alfa group-hover:opacity-100"
                     >
@@ -322,7 +426,8 @@ export default function TeamCabinet() {
             <h3 className="mb-3 font-display text-lg font-extrabold">Баллы и обратная связь</h3>
             <div className="space-y-2.5">
               {GAMES.filter((g) => g.status !== 'locked').map((g) => {
-                const s = me.perGame[g.id]
+                const s = scores[g.id]
+                if (!s) return null
                 const sum = s.cases + s.bonus + s.superBonus
                 return (
                   <div key={g.id} className="rounded-2xl bg-white/50 p-3">
