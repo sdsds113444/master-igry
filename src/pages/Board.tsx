@@ -177,10 +177,25 @@ export default function Board() {
                   />
                 ) : (
                   <div
-                    className="absolute inset-0 grid place-items-center text-5xl"
-                    style={{ background: `linear-gradient(135deg, ${g.accent}2e, ${g.accent}0a)` }}
+                    className="absolute inset-0 overflow-hidden"
+                    style={{ background: `linear-gradient(135deg, ${g.accent}38, ${g.accent}0d)` }}
                   >
-                    {g.emoji}
+                    <span
+                      className="pointer-events-none absolute -left-3 -top-5 h-16 w-16 rounded-full blur-xl"
+                      style={{ background: `${g.accent}55` }}
+                    />
+                    <span
+                      className="pointer-events-none absolute -bottom-6 -right-4 h-20 w-20 rounded-full blur-xl"
+                      style={{ background: `${g.accent}40` }}
+                    />
+                    <div className="absolute inset-0 grid place-items-center">
+                      <span
+                        className="text-6xl"
+                        style={{ filter: `drop-shadow(0 6px 10px ${g.accent}70)` }}
+                      >
+                        {g.emoji}
+                      </span>
+                    </div>
                   </div>
                 )}
                 <div className="absolute right-2 top-2">
