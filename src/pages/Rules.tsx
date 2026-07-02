@@ -21,7 +21,7 @@ export default function Rules() {
               📖 Регламент конкурса
             </span>
             <h1 className="mt-3 font-display text-3xl font-extrabold leading-tight sm:text-4xl">
-              Правила <span className="text-gradient">«Мастера игры»</span>
+              Правила <span className="text-gradient">«Героев на линии»</span>
             </h1>
             <p className="mt-2 max-w-md text-sm text-ink-soft">
               Всё, что нужно знать команде: формат, ритм недели, как считаются баллы и что можно выиграть.
