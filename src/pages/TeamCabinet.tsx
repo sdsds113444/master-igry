@@ -48,9 +48,11 @@ export default function TeamCabinet() {
 
   useEffect(() => {
     let unsub: { unsubscribe(): void } | null = null
+    let cancelled = false
 
     async function load() {
       const team = await getMyTeam()
+      if (cancelled) return
       setMe(team)
       if (!team) { setLoading(false); return }
 
@@ -62,6 +64,7 @@ export default function TeamCabinet() {
         getSubmission(team.id, CURRENT_TASK.gameId),
         listMessages(team.id),
       ])
+      if (cancelled) return
 
       const mine = rating.find((x) => x.id === team.id)
       setRank(mine?.rank ?? 1)
@@ -73,11 +76,16 @@ export default function TeamCabinet() {
       setChat(msgs)
       setLoading(false)
 
-      unsub = subscribeMessages(team.id, (m) => setChat((c) => [...c, m]))
+      // Компонент мог размонтироваться, пока грузились данные (напр. двойной
+      // запуск эффекта в StrictMode) — тогда сразу отключаем подписку, а не
+      // оставляем висеть «осиротевший» канал.
+      const liveSub = subscribeMessages(team.id, (m) => setChat((c) => [...c, m]))
+      if (cancelled) { liveSub.unsubscribe(); return }
+      unsub = liveSub
     }
     load()
 
-    return () => unsub?.unsubscribe()
+    return () => { cancelled = true; unsub?.unsubscribe() }
   }, [])
 
   const heroStars = 3 + (Math.max(0, 30 - rank) / 30) * 2

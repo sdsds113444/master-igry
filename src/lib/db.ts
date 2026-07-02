@@ -186,8 +186,12 @@ export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void): 
     }
   }
   const sb = requireClient()
+  // Уникальный topic на каждый вызов — иначе повторный вызов (напр. из-за
+  // React StrictMode двойного монтирования эффекта в dev) создаёт второй канал
+  // с тем же именем на том же сокете, и обе подписки начинают работать нестабильно.
+  const topic = `team-chat-${teamId}-${Math.random().toString(36).slice(2)}`
   const ch = sb
-    .channel('team-chat-' + teamId)
+    .channel(topic)
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'messages', filter: `team_id=eq.${teamId}` },
