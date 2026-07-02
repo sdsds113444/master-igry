@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Megaphone, RefreshCw, Check, Plus, Trophy, Upload, Loader2, MessageCircle } from 'lucide-react'
-import { GAMES, CURRENT_GAME } from '../data/mock'
-import { listAllTeamsAdmin, getScoresForGame, gradeSubmission, type AdminTeamRow } from '../lib/db'
+import { type Game } from '../data/mock'
+import {
+  listAllTeamsAdmin, getScoresForGame, gradeSubmission, getGames, publishGame, pickCurrentGame,
+  type AdminTeamRow,
+} from '../lib/db'
 import MentorChatModal from '../components/MentorChatModal'
 
 interface Grade {
@@ -15,8 +18,10 @@ interface Grade {
 }
 
 export default function Admin() {
-  const [gameId, setGameId] = useState(CURRENT_GAME.id)
+  const [games, setGames] = useState<Game[]>([])
+  const [gameId, setGameId] = useState('')
   const [published, setPublished] = useState(false)
+  const [publishing, setPublishing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -25,7 +30,16 @@ export default function Admin() {
   const [grades, setGrades] = useState<Record<string, Grade>>({})
   const [chatTeam, setChatTeam] = useState<AdminTeamRow | null>(null)
 
+  // список игр + игра по умолчанию (текущая недели)
   useEffect(() => {
+    getGames().then((gs) => {
+      setGames(gs)
+      setGameId((cur) => cur || pickCurrentGame(gs).id)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!gameId) return
     let cancelled = false
     async function load() {
       setLoading(true)
@@ -74,6 +88,15 @@ export default function Admin() {
     setSaved(true)
   }
 
+  async function publish() {
+    if (!gameId || publishing) return
+    setPublishing(true)
+    await publishGame(gameId)
+    setGames(await getGames()) // подтянуть новый статус игры
+    setPublishing(false)
+    setPublished(true)
+  }
+
   return (
     <div className="space-y-6">
       {/* Заголовок */}
@@ -104,7 +127,7 @@ export default function Admin() {
               onChange={(e) => setGameId(e.target.value)}
               className="rounded-2xl border border-black/5 bg-white/70 px-4 py-2.5 text-sm font-bold outline-none focus:border-alfa/40"
             >
-              {GAMES.map((g) => (
+              {games.map((g) => (
                 <option key={g.id} value={g.id}>
                   Игра {g.num}: {g.title}
                 </option>
@@ -120,10 +143,15 @@ export default function Admin() {
           </button>
 
           <button
-            onClick={() => setPublished(true)}
-            className="btn-alfa ml-auto flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-bold"
+            onClick={publish}
+            disabled={publishing || !gameId}
+            className="btn-alfa ml-auto flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-bold disabled:opacity-60"
           >
-            {published ? <><Check size={16} /> Опубликовано на доске</> : <><Megaphone size={16} /> Выложить задание</>}
+            {publishing
+              ? <><Loader2 size={16} className="animate-spin" /> Публикую…</>
+              : published
+                ? <><Check size={16} /> Опубликовано на доске</>
+                : <><Megaphone size={16} /> Выложить задание</>}
           </button>
         </div>
       </div>

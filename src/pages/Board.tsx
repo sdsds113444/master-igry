@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { Trophy, Crown, Flame, Lock, Check, Play, ArrowRight, Medal, Loader2 } from 'lucide-react'
-import { GAMES, FEED, CURRENT_GAME, GAME_VIDEO, START_VIDEO } from '../data/mock'
-import { getMyTeam, listTeamsRating, type RatingRow, type TeamInfo } from '../lib/db'
+import { GAME_VIDEO, START_VIDEO, type Game } from '../data/mock'
+import {
+  getMyTeam, listTeamsRating, getGames, listFeed, pickCurrentGame,
+  type RatingRow, type TeamInfo, type FeedRow,
+} from '../lib/db'
 import Stars from '../components/Stars'
 import VideoModal from '../components/VideoModal'
 
@@ -34,25 +37,31 @@ const GAME_IMAGE_POSITION: Record<string, string> = {
 export default function Board() {
   const [rating, setRating] = useState<RatingRow[] | null>(null)
   const [myTeam, setMyTeam] = useState<TeamInfo | null>(null)
+  const [games, setGames] = useState<Game[] | null>(null)
+  const [feed, setFeed] = useState<FeedRow[] | null>(null)
   const [video, setVideo] = useState<{ title: string; src: string } | null>(null)
 
   useEffect(() => {
     listTeamsRating().then(setRating)
     getMyTeam().then(setMyTeam)
+    getGames().then(setGames)
+    listFeed().then(setFeed)
   }, [])
 
-  const doneCount = GAMES.filter((g) => g.status === 'done').length
   const myRating = rating?.find((r) => r.id === myTeam?.id)
   const myRank = myRating?.rank ?? 1
   const heroStars = 3 + (Math.max(0, 30 - myRank) / 30) * 2 // 3..5
 
-  if (!rating) {
+  if (!rating || !games || !feed) {
     return (
       <div className="grid min-h-[40vh] place-items-center text-ink-soft">
         <Loader2 className="animate-spin" />
       </div>
     )
   }
+
+  const doneCount = games.filter((g) => g.status === 'done').length
+  const currentGame = pickCurrentGame(games)
 
   return (
     <div className="space-y-6">
@@ -73,28 +82,28 @@ export default function Board() {
           {/* Текст */}
           <div className="relative z-10 p-7 sm:p-9">
             <span className="inline-flex items-center gap-2 rounded-full bg-alfa/10 px-3 py-1 text-xs font-bold text-alfa">
-              <Flame size={13} /> Сезон 1 · Неделя {CURRENT_GAME.week} из 9
+              <Flame size={13} /> Сезон 1 · Неделя {currentGame.week} из 9
             </span>
             <h1 className="mt-3 font-display text-3xl font-extrabold leading-[1.1] sm:text-4xl">
               Общая доска <span className="text-gradient">чемпионата</span>
             </h1>
             <p className="mt-2 max-w-md text-sm text-ink-soft">
               Здесь выходят мультики КОЯ, прилетают задания недели и обновляется рейтинг всех
-              30 команд. Сейчас идёт игра «{CURRENT_GAME.title}».
+              30 команд. Сейчас идёт игра «{currentGame.title}».
             </p>
 
             {/* Прогресс сезона */}
             <div className="mt-5 max-w-md">
               <div className="mb-1.5 flex justify-between text-xs font-semibold text-ink-soft">
                 <span>Прогресс сезона</span>
-                <span>{doneCount} / {GAMES.length} игр</span>
+                <span>{doneCount} / {games.length} игр</span>
               </div>
               <div className="h-2.5 overflow-hidden rounded-full bg-black/10">
                 <motion.div
                   className="h-full rounded-full"
                   style={{ background: 'linear-gradient(90deg,#ff6a5c,#ef3124)' }}
                   initial={{ width: 0 }}
-                  animate={{ width: `${(doneCount / GAMES.length) * 100}%` }}
+                  animate={{ width: `${(doneCount / games.length) * 100}%` }}
                   transition={{ duration: 1, delay: 0.3 }}
                 />
               </div>
@@ -164,7 +173,7 @@ export default function Board() {
           🎬 Игры сезона
         </h2>
         <div className="flex gap-3 overflow-x-auto pb-2">
-          {GAMES.map((g, i) => (
+          {games.map((g, i) => (
             <motion.div
               key={g.id}
               custom={i}
@@ -238,14 +247,14 @@ export default function Board() {
             📰 Лента доски
           </h2>
           <div className="space-y-3">
-            {FEED.map((f, i) => (
+            {feed.map((f, i) => (
               <motion.article
                 key={f.id}
                 custom={i}
                 variants={fadeUp}
                 initial="hidden"
                 animate="show"
-                onClick={f.kind === 'video' ? () => setVideo({ title: f.title, src: GAME_VIDEO[CURRENT_GAME.id] }) : undefined}
+                onClick={f.kind === 'video' ? () => setVideo({ title: f.title, src: GAME_VIDEO[f.gameId ?? currentGame.id] }) : undefined}
                 className={`glass lift flex gap-3 rounded-3xl p-4 ${f.kind === 'video' ? 'cursor-pointer' : ''}`}
               >
                 <span className="relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/70 text-2xl">

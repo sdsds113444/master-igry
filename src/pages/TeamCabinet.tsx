@@ -5,12 +5,12 @@ import {
   UserPlus, X, MessageSquare, Loader2,
 } from 'lucide-react'
 import {
-  CURRENT_TASK, GAMES, GAME_VIDEO, GAME_FILE,
-  type TeamScore, type CaseItem,
+  GAME_VIDEO, GAME_FILE,
+  type TeamScore, type CaseItem, type Game,
 } from '../data/mock'
 import {
   getMyTeam, listTeamsRating, getRoster, addPlayer as dbAddPlayer, removePlayer as dbRemovePlayer,
-  getCases, getScores, getSubmission, submitAnswer,
+  getCases, getScores, getSubmission, submitAnswer, getGames, pickCurrentGame,
   listMessages, sendMessage, subscribeMessages, getDisplayName, setDisplayName,
   type TeamInfo, type ChatMsg,
 } from '../lib/db'
@@ -24,6 +24,8 @@ const diffColor: Record<string, string> = {
   Сложный: '#ef3124',
 }
 
+const DEADLINE = 'Пятница, 15:00 МСК'
+
 export default function TeamCabinet() {
   const [me, setMe] = useState<TeamInfo | null>(null)
   const [loading, setLoading] = useState(true)
@@ -33,6 +35,8 @@ export default function TeamCabinet() {
   const [videoOpen, setVideoOpen] = useState(false)
   const [mentorChatOpen, setMentorChatOpen] = useState(false)
 
+  const [games, setGames] = useState<Game[]>([])
+  const [current, setCurrent] = useState<Game | null>(null)
   const [cases, setCases] = useState<CaseItem[]>([])
   const [scores, setScores] = useState<Record<string, TeamScore>>({})
 
@@ -58,12 +62,16 @@ export default function TeamCabinet() {
       setMe(team)
       if (!team) { setLoading(false); return }
 
+      const gs = await getGames()
+      if (cancelled) return
+      const cur = pickCurrentGame(gs)
+
       const [rating, r, c, s, sub, msgs] = await Promise.all([
         listTeamsRating(),
         getRoster(team.id),
-        getCases(CURRENT_TASK.gameId),
+        getCases(cur.id),
         getScores(team.id),
-        getSubmission(team.id, CURRENT_TASK.gameId),
+        getSubmission(team.id, cur.id),
         listMessages(team.id),
       ])
       if (cancelled) return
@@ -71,6 +79,8 @@ export default function TeamCabinet() {
       const mine = rating.find((x) => x.id === team.id)
       setRank(mine?.rank ?? 1)
       setTotal(mine?.total ?? 0)
+      setGames(gs)
+      setCurrent(cur)
       setRoster(r)
       setCases(c)
       setScores(s)
@@ -124,9 +134,9 @@ export default function TeamCabinet() {
   }
 
   async function sendAnswer() {
-    if (!me) return
+    if (!me || !current) return
     setSent(true)
-    await submitAnswer({ teamId: me.id, gameId: CURRENT_TASK.gameId, answer, fileName: fileAttached })
+    await submitAnswer({ teamId: me.id, gameId: current.id, answer, fileName: fileAttached })
   }
 
   if (loading) {
@@ -146,13 +156,18 @@ export default function TeamCabinet() {
     )
   }
 
+  if (!current) return null
+
+  const videoTitle = `Мультик КОЯ — ${current.title}`
+  const fileName = GAME_FILE[current.id]?.split('/').pop() ?? 'кейсы.xlsx'
+
   return (
     <div className="space-y-6">
       <VideoModal
         open={videoOpen}
         onClose={() => setVideoOpen(false)}
-        title={CURRENT_TASK.videoTitle}
-        src={GAME_VIDEO[CURRENT_TASK.gameId]}
+        title={videoTitle}
+        src={GAME_VIDEO[current.id]}
       />
       {/* Шапка команды */}
       <motion.div
@@ -210,10 +225,10 @@ export default function TeamCabinet() {
         <section className="space-y-4">
           <div className="glass rounded-[28px] p-5">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-alfa">
-              <Clock size={13} /> Дедлайн: {CURRENT_TASK.deadline}
+              <Clock size={13} /> Дедлайн: {DEADLINE}
             </div>
-            <h2 className="mt-1 font-display text-2xl font-extrabold">{CURRENT_TASK.title}</h2>
-            <p className="mt-1 text-sm text-ink-soft">{CURRENT_TASK.skill}</p>
+            <h2 className="mt-1 font-display text-2xl font-extrabold">{current.title}</h2>
+            <p className="mt-1 text-sm text-ink-soft">{current.skill}</p>
 
             {/* Мультик + файл */}
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -226,13 +241,13 @@ export default function TeamCabinet() {
                   <span className="mb-1.5 inline-grid h-9 w-9 place-items-center rounded-full bg-white/25">
                     <Play size={16} />
                   </span>
-                  <div className="text-sm font-bold">{CURRENT_TASK.videoTitle}</div>
+                  <div className="text-sm font-bold">{videoTitle}</div>
                   <div className="text-xs text-white/80">Посмотреть перед стартом</div>
                 </div>
               </button>
               <a
-                href={GAME_FILE[CURRENT_TASK.gameId]}
-                download={CURRENT_TASK.fileName}
+                href={GAME_FILE[current.id]}
+                download={fileName}
                 className="group flex min-h-[112px] flex-col justify-end rounded-2xl bg-white/70 p-4 text-left transition-colors hover:bg-white"
               >
                 <span className="mb-1.5 inline-grid h-9 w-9 place-items-center rounded-full bg-alfa/10 text-alfa">
@@ -240,7 +255,7 @@ export default function TeamCabinet() {
                 </span>
                 <div className="text-sm font-bold">Скачать кейсы</div>
                 <div className="truncate text-xs text-ink-soft">
-                  Все {CURRENT_TASK.totalCases} кейсов · Excel
+                  Все {cases.length} кейсов · Excel
                 </div>
               </a>
             </div>
@@ -442,7 +457,7 @@ export default function TeamCabinet() {
           <div className="glass rounded-[28px] p-5">
             <h3 className="mb-3 font-display text-lg font-extrabold">Баллы и обратная связь</h3>
             <div className="space-y-2.5">
-              {GAMES.filter((g) => g.status !== 'locked').map((g) => {
+              {games.filter((g) => g.status !== 'locked').map((g) => {
                 const s = scores[g.id]
                 if (!s) return null
                 const sum = s.cases + s.bonus + s.superBonus

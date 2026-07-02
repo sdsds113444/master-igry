@@ -7,8 +7,8 @@
 
 import { isSupabaseConfigured, supabase, requireClient } from './supabase'
 import {
-  TEAMS, GAMES, ROSTER_SEED, TEAM_CHAT_SEED,
-  type TeamScore, type CaseItem,
+  TEAMS, GAMES, FEED, ROSTER_SEED, TEAM_CHAT_SEED,
+  type TeamScore, type CaseItem, type Game, type FeedItem,
 } from '../data/mock'
 import { GAME_CASES } from '../data/cases'
 
@@ -334,4 +334,47 @@ export async function getScoresForGame(gameId: string): Promise<Record<string, G
   return out
 }
 
-export function getGames() { return GAMES }
+// =====================================================================
+// ИГРЫ СЕЗОНА + ЛЕНТА ДОСКИ + ПУБЛИКАЦИЯ (админ)
+// =====================================================================
+export async function getGames(): Promise<Game[]> {
+  if (!isSupabaseConfigured) return GAMES
+  const sb = requireClient()
+  const { data } = await sb.from('games').select('id, num, week, title, skill, emoji, accent, status').order('num')
+  return (data as Game[] | null)?.length ? (data as Game[]) : GAMES
+}
+
+/** Текущая игра недели: последняя (по номеру) в статусе 'current'; иначе первая незакрытая. */
+export function pickCurrentGame(games: Game[]): Game {
+  const current = games.filter((g) => g.status === 'current').sort((a, b) => b.num - a.num)
+  return current[0] ?? games.find((g) => g.status !== 'done') ?? games[0]
+}
+
+export interface FeedRow { id: string; kind: FeedItem['kind']; title: string; text: string; date: string; emoji: string; gameId: string | null }
+
+function feedDate(iso: string): string {
+  return new Date(iso).toLocaleString('ru', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
+export async function listFeed(): Promise<FeedRow[]> {
+  if (!isSupabaseConfigured) {
+    return FEED.map((f) => ({ id: f.id, kind: f.kind, title: f.title, text: f.text, date: f.date, emoji: f.emoji, gameId: null }))
+  }
+  const sb = requireClient()
+  const { data } = await sb.from('feed_items').select('*').order('created_at', { ascending: false })
+  return (data ?? []).map((f) => ({
+    id: f.id as string,
+    kind: f.kind as FeedItem['kind'],
+    title: f.title as string,
+    text: f.text as string,
+    date: feedDate(f.created_at as string),
+    emoji: f.emoji as string,
+    gameId: (f.game_id as string) ?? null,
+  }))
+}
+
+/** Опубликовать задание недели: игра → 'current', прошлые current → 'done', запись в ленту. Только админ. */
+export async function publishGame(gameId: string): Promise<void> {
+  if (!isSupabaseConfigured) return
+  await requireClient().rpc('publish_game', { p_game_id: gameId })
+}

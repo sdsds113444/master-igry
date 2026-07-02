@@ -43,7 +43,8 @@ create table if not exists public.games (
   accent    text,
   status    text not null default 'locked' check (status in ('done','current','locked')),
   video_url text,
-  file_url  text
+  file_url  text,
+  published_at timestamptz
 );
 
 -- Состав команды (капитан редактирует).
@@ -219,10 +220,12 @@ drop policy if exists teams_admin_write on public.teams;
 create policy teams_admin_write on public.teams for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
 
--- games: видно всем вошедшим, КРОМЕ locked (будущие не утекают). Пишет только админ.
+-- games: команды видят ВСЕ игры сезона как дорожную карту (название/навык/статус),
+-- включая будущие 'locked' — это не секретный контент (сам контент = кейсы,
+-- он закрыт политикой cases_select ниже). Пишет только админ.
 drop policy if exists games_select on public.games;
 create policy games_select on public.games for select to authenticated
-  using (public.is_admin() or status <> 'locked');
+  using (true);
 drop policy if exists games_admin_write on public.games;
 create policy games_admin_write on public.games for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
