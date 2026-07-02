@@ -50,8 +50,7 @@ export default function VideoModal({
               />
             </div>
             <p className="px-2 py-2 text-xs text-ink-soft">
-              Демо-ролик. Сюда организатор загрузит мультик КОЯ — эпизод недели
-              (ссылкой на YouTube/VK/Rutube или файлом).
+              Мультик КОЯ — эпизод недели. Посмотрите всей командой перед тем, как решать кейсы 🐾
             </p>
           </motion.div>
         </motion.div>

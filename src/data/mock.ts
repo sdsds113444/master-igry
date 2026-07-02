@@ -63,9 +63,22 @@ export const GAMES: Game[] = [
 
 export const CURRENT_GAME = GAMES.find((g) => g.status === 'current')!
 
-/** Демо-ролик (mp4). В бою заменяется на ссылку YouTube/VK/Rutube эпизода КОЯ. */
-export const DEMO_VIDEO =
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4'
+/** Стартовый мультик КОЯ (из письма-приглашения). */
+export const START_VIDEO = '/video/mult-start.mp4'
+
+/** Маппинг «игра → мультик КОЯ».
+ *  Локальные файлы для превью. Для живого сайта заменить на ссылки
+ *  YouTube/VK (скрытые) — большие mp4 нельзя раздавать с бесплатного хостинга.
+ *  ПРОВЕРЬ ПОРЯДОК: сейчас МУЛЬТ2→Детектив … МУЛЬТ8→Марафон. */
+export const GAME_VIDEO: Record<string, string> = {
+  detective: '/video/mult-2.mp4', // игра 1 — Детектив
+  noforward: '/video/mult-3.mp4', // игра 2 — Не перекладывай
+  iknow: '/video/mult-4.mp4', // игра 3 — Продуктовый «Я знаю всё»
+  empathy: '/video/mult-5.mp4', // игра 4 — Эмпатия (текущая)
+  onecall: '/video/mult-6.mp4', // игра 5 — Один звонок
+  captains: '/video/mult-7.mp4', // игра 6 — Битва капитанов
+  marathon: '/video/mult-8.mp4', // игра 7 — Альфа-марафон
+}
 
 /** Контакт тренера для кнопки «написать» (в бою — реальный МАКС/Telegram/почта). */
 export const MENTOR_CONTACT = 'mailto:trener.kc@alfabank.ru?subject=Мастер%20игры%20—%20команда%20KOYA-04'

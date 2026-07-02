@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import {
   Play, FileDown, Upload, Send, MessageCircle, Crown, CheckCircle2, Clock, Star,
 } from 'lucide-react'
-import { TEAMS, MY_TEAM_CODE, CURRENT_TASK, GAMES, DEMO_VIDEO, MENTOR_CONTACT } from '../data/mock'
+import { TEAMS, MY_TEAM_CODE, CURRENT_TASK, GAMES, GAME_VIDEO, MENTOR_CONTACT } from '../data/mock'
 import Stars from '../components/Stars'
 import VideoModal from '../components/VideoModal'
 
@@ -31,7 +31,7 @@ export default function TeamCabinet() {
         open={videoOpen}
         onClose={() => setVideoOpen(false)}
         title={CURRENT_TASK.videoTitle}
-        src={DEMO_VIDEO}
+        src={GAME_VIDEO[CURRENT_TASK.gameId]}
       />
       {/* Шапка команды */}
       <motion.div

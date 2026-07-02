@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { Trophy, Crown, Flame, Lock, Check, Play, ArrowRight, Medal } from 'lucide-react'
-import { GAMES, TEAMS, FEED, MY_TEAM_CODE, CURRENT_GAME, DEMO_VIDEO } from '../data/mock'
+import { GAMES, TEAMS, FEED, MY_TEAM_CODE, CURRENT_GAME, GAME_VIDEO } from '../data/mock'
 import Stars from '../components/Stars'
 import VideoModal from '../components/VideoModal'
 
@@ -16,15 +16,15 @@ export default function Board() {
   const myRank = myTeam.rank ?? 1
   const doneCount = GAMES.filter((g) => g.status === 'done').length
   const heroStars = 3 + (Math.max(0, 30 - myRank) / 30) * 2 // 3..5
-  const [videoTitle, setVideoTitle] = useState<string | null>(null)
+  const [video, setVideo] = useState<{ title: string; src: string } | null>(null)
 
   return (
     <div className="space-y-6">
       <VideoModal
-        open={videoTitle !== null}
-        onClose={() => setVideoTitle(null)}
-        title={videoTitle ?? ''}
-        src={DEMO_VIDEO}
+        open={video !== null}
+        onClose={() => setVideo(null)}
+        title={video?.title ?? ''}
+        src={video?.src ?? ''}
       />
       {/* ==== ГЕРОЙ-БАННЕР ==== */}
       <motion.section
@@ -127,8 +127,9 @@ export default function Board() {
               variants={fadeUp}
               initial="hidden"
               animate="show"
+              onClick={g.status !== 'locked' ? () => setVideo({ title: 'Мультик — ' + g.title, src: GAME_VIDEO[g.id] }) : undefined}
               className={`glass lift min-w-[190px] flex-1 rounded-3xl p-4 ${
-                g.status === 'locked' ? 'opacity-60' : ''
+                g.status === 'locked' ? 'opacity-60' : 'cursor-pointer'
               }`}
               style={g.status === 'current' ? { boxShadow: `0 0 0 2px ${g.accent}, 0 16px 40px -16px ${g.accent}` } : {}}
             >
@@ -143,6 +144,11 @@ export default function Board() {
               </div>
               <div className="font-display text-[15px] font-extrabold leading-tight">{g.title}</div>
               <p className="mt-1 line-clamp-2 text-xs text-ink-soft">{g.skill}</p>
+              {g.status !== 'locked' && (
+                <div className="mt-2 flex items-center gap-1 text-[11px] font-bold" style={{ color: g.accent }}>
+                  <Play size={11} fill="currentColor" /> Смотреть мультик
+                </div>
+              )}
             </motion.div>
           ))}
         </div>
@@ -163,7 +169,7 @@ export default function Board() {
                 variants={fadeUp}
                 initial="hidden"
                 animate="show"
-                onClick={f.kind === 'video' ? () => setVideoTitle(f.title) : undefined}
+                onClick={f.kind === 'video' ? () => setVideo({ title: f.title, src: GAME_VIDEO[CURRENT_GAME.id] }) : undefined}
                 className={`glass lift flex gap-3 rounded-3xl p-4 ${f.kind === 'video' ? 'cursor-pointer' : ''}`}
               >
                 <span className="relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/70 text-2xl">
