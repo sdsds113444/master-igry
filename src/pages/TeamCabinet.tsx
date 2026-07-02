@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import {
   Play, FileDown, Upload, Send, MessageCircle, Crown, CheckCircle2, Clock, Star,
 } from 'lucide-react'
-import { TEAMS, MY_TEAM_CODE, CURRENT_TASK, GAMES, GAME_VIDEO, MENTOR_CONTACT } from '../data/mock'
+import { TEAMS, MY_TEAM_CODE, CURRENT_TASK, GAMES, GAME_VIDEO, GAME_FILE, MENTOR_CONTACT } from '../data/mock'
 import Stars from '../components/Stars'
 import VideoModal from '../components/VideoModal'
 
@@ -24,6 +24,7 @@ export default function TeamCabinet() {
   const [answer, setAnswer] = useState('')
   const [sent, setSent] = useState(false)
   const [videoOpen, setVideoOpen] = useState(false)
+  const [fileAttached, setFileAttached] = useState<string | null>(null)
 
   return (
     <div className="space-y-6">
@@ -101,13 +102,19 @@ export default function TeamCabinet() {
                   <div className="text-xs text-white/80">Посмотреть перед стартом</div>
                 </div>
               </button>
-              <button className="group flex min-h-[112px] flex-col justify-end rounded-2xl bg-white/70 p-4 text-left transition-colors hover:bg-white">
+              <a
+                href={GAME_FILE[CURRENT_TASK.gameId]}
+                download={CURRENT_TASK.fileName}
+                className="group flex min-h-[112px] flex-col justify-end rounded-2xl bg-white/70 p-4 text-left transition-colors hover:bg-white"
+              >
                 <span className="mb-1.5 inline-grid h-9 w-9 place-items-center rounded-full bg-alfa/10 text-alfa">
                   <FileDown size={16} />
                 </span>
                 <div className="text-sm font-bold">Скачать кейсы</div>
-                <div className="truncate text-xs text-ink-soft">{CURRENT_TASK.fileName}</div>
-              </button>
+                <div className="truncate text-xs text-ink-soft">
+                  Все {CURRENT_TASK.totalCases} кейсов · Excel
+                </div>
+              </a>
             </div>
           </div>
 
@@ -156,9 +163,18 @@ export default function TeamCabinet() {
                   className="mt-3 w-full resize-none rounded-2xl border border-black/5 bg-white/70 p-4 text-sm outline-none focus:border-alfa/40"
                 />
                 <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <button className="flex items-center gap-2 rounded-2xl bg-white/70 px-4 py-2.5 text-sm font-bold transition-colors hover:bg-white">
-                    <Upload size={16} /> Прикрепить файл
-                  </button>
+                  <label className="flex max-w-full cursor-pointer items-center gap-2 rounded-2xl bg-white/70 px-4 py-2.5 text-sm font-bold transition-colors hover:bg-white">
+                    <Upload size={16} className="shrink-0" />
+                    <span className="truncate">
+                      {fileAttached ? fileAttached : 'Прикрепить заполненный файл'}
+                    </span>
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.pdf,.doc,.docx"
+                      className="hidden"
+                      onChange={(e) => setFileAttached(e.target.files?.[0]?.name ?? null)}
+                    />
+                  </label>
                   <button
                     onClick={() => setSent(true)}
                     className="btn-alfa ml-auto flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-bold"
