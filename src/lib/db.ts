@@ -7,9 +7,10 @@
 
 import { isSupabaseConfigured, supabase, requireClient } from './supabase'
 import {
-  TEAMS, GAMES, CURRENT_TASK, ROSTER_SEED, TEAM_CHAT_SEED,
+  TEAMS, GAMES, ROSTER_SEED, TEAM_CHAT_SEED,
   type TeamScore, type CaseItem,
 } from '../data/mock'
+import { GAME_CASES } from '../data/cases'
 
 export type Role = 'player' | 'admin'
 export interface Session { teamId: string | null; code: string; role: Role; name: string; hue: number }
@@ -208,7 +209,7 @@ export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void): 
 // =====================================================================
 export async function getCases(gameId: string): Promise<CaseItem[]> {
   if (!isSupabaseConfigured) {
-    return gameId === CURRENT_TASK.gameId ? CURRENT_TASK.cases : []
+    return GAME_CASES[gameId] ?? []
   }
   const sb = requireClient()
   const { data } = await sb.from('cases').select('id, title, difficulty, body').eq('game_id', gameId).order('ord')
