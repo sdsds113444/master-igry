@@ -1,0 +1,163 @@
+@import 'tailwindcss';
+
+/* ============ ДИЗАЙН-СИСТЕМА «КОЯ» ============ */
+@theme {
+  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Unbounded', 'Manrope', sans-serif;
+
+  /* Альфа / КОЯ */
+  --color-alfa: #ef3124;
+  --color-alfa-dark: #c81e12;
+  --color-alfa-soft: #ff6a5c;
+
+  /* Пастель — переливы фонов КОЯ */
+  --color-peach: #ffe3d3;
+  --color-mint: #d8f5e6;
+  --color-sky: #d9e9ff;
+  --color-lilac: #ece0ff;
+  --color-lemon: #fff3cf;
+
+  --color-ink: #201a24;
+  --color-ink-soft: #5b5566;
+
+  --color-gold: #ffc244;
+
+  --radius-glass: 26px;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+    background: #f6f4fb;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--color-alfa) 25%, transparent);
+  }
+  /* Мягкий скролл-бар */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(120, 110, 140, 0.28);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+}
+
+/* ---- Переливающийся пастельный фон, как на рендерах КОЯ ---- */
+.koya-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  background:
+    radial-gradient(60% 55% at 12% 8%, var(--color-peach) 0%, transparent 60%),
+    radial-gradient(55% 55% at 88% 12%, var(--color-sky) 0%, transparent 60%),
+    radial-gradient(65% 60% at 78% 92%, var(--color-lilac) 0%, transparent 62%),
+    radial-gradient(60% 55% at 8% 88%, var(--color-mint) 0%, transparent 60%),
+    linear-gradient(135deg, #fbf7ff 0%, #f2f7ff 45%, #fff4f0 100%);
+}
+.koya-bg::before {
+  content: '';
+  position: absolute;
+  width: 46vw;
+  height: 46vw;
+  left: -6vw;
+  top: -8vw;
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-alfa) 22%, transparent), transparent 68%);
+  filter: blur(30px);
+  animation: koya-float1 18s ease-in-out infinite;
+}
+.koya-bg::after {
+  content: '';
+  position: absolute;
+  width: 42vw;
+  height: 42vw;
+  right: -8vw;
+  bottom: -10vw;
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-lilac) 80%, transparent), transparent 66%);
+  filter: blur(34px);
+  animation: koya-float2 22s ease-in-out infinite;
+}
+@keyframes koya-float1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(4vw, 3vw) scale(1.08); }
+}
+@keyframes koya-float2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-3vw, -2vw) scale(1.1); }
+}
+
+/* ---- Glassmorphism ---- */
+.glass {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow:
+    0 12px 40px -12px rgba(80, 60, 120, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+.glass-strong {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 18px 50px -16px rgba(80, 60, 120, 0.35);
+}
+.glass-dark {
+  background: linear-gradient(160deg, rgba(40, 30, 55, 0.72), rgba(30, 22, 42, 0.6));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+/* Красная фирменная кнопка */
+.btn-alfa {
+  background: linear-gradient(180deg, var(--color-alfa-soft), var(--color-alfa));
+  color: #fff;
+  box-shadow: 0 10px 24px -8px rgba(239, 49, 36, 0.6);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+.btn-alfa:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 30px -8px rgba(239, 49, 36, 0.7);
+  filter: saturate(1.05);
+}
+.btn-alfa:active {
+  transform: translateY(0);
+}
+
+/* Мягкий hover-подъём карточек */
+.lift {
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.22s ease;
+}
+.lift:hover {
+  transform: translateY(-4px);
+}
+
+/* Текстовый градиент для заголовков */
+.text-gradient {
+  background: linear-gradient(120deg, var(--color-alfa) 0%, #b6208f 55%, #6a4bd6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Падающие «коечки» на доске */
+@keyframes koya-drop {
+  0% { transform: translateY(-120%) rotate(-8deg); opacity: 0; }
+  12% { opacity: 1; }
+  100% { transform: translateY(120vh) rotate(12deg); opacity: 0; }
+}
