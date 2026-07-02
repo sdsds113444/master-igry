@@ -147,13 +147,16 @@ function hhmm(iso: string): string {
   return new Date(iso).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })
 }
 
-export async function listMessages(teamId: string): Promise<ChatMsg[]> {
+export type ChatChannel = 'team' | 'mentor'
+
+export async function listMessages(teamId: string, channel: ChatChannel = 'team'): Promise<ChatMsg[]> {
   const meName = getDisplayName()
+  const key = `${teamId}:${channel}`
   if (!isSupabaseConfigured) {
-    return mockChat[teamId] ?? (mockChat[teamId] = TEAM_CHAT_SEED.map((m, i) => ({ id: 's' + i, ...m })))
+    return mockChat[key] ?? (mockChat[key] = channel === 'team' ? TEAM_CHAT_SEED.map((m, i) => ({ id: 's' + i, ...m })) : [])
   }
   const sb = requireClient()
-  const { data } = await sb.from('messages').select('*').eq('team_id', teamId).order('created_at')
+  const { data } = await sb.from('messages').select('*').eq('team_id', teamId).eq('channel', channel).order('created_at')
   return (data ?? []).map((m) => ({
     id: m.id as string,
     author: m.author as string,
@@ -163,25 +166,27 @@ export async function listMessages(teamId: string): Promise<ChatMsg[]> {
   }))
 }
 
-export async function sendMessage(teamId: string, author: string, text: string): Promise<void> {
+export async function sendMessage(teamId: string, author: string, text: string, channel: ChatChannel = 'team'): Promise<void> {
   const t = text.trim()
   if (!t) return
+  const key = `${teamId}:${channel}`
   if (!isSupabaseConfigured) {
     const msg: ChatMsg = { id: 'm' + Math.random().toString(36).slice(2), author, text: t, time: 'только что', me: true }
-    ;(mockChat[teamId] ??= []).push(msg)
-    ;(mockSubs[teamId] ?? []).forEach((cb) => cb(msg))
+    ;(mockChat[key] ??= []).push(msg)
+    ;(mockSubs[key] ?? []).forEach((cb) => cb(msg))
     return
   }
-  await requireClient().from('messages').insert({ team_id: teamId, author, text: t })
+  await requireClient().from('messages').insert({ team_id: teamId, author, text: t, channel })
 }
 
-/** Подписка на новые сообщения команды. Возвращает объект с .unsubscribe(). */
-export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void): { unsubscribe(): void } {
+/** Подписка на новые сообщения (командный чат или личный с тренером). Возвращает объект с .unsubscribe(). */
+export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void, channel: ChatChannel = 'team'): { unsubscribe(): void } {
+  const key = `${teamId}:${channel}`
   if (!isSupabaseConfigured) {
-    ;(mockSubs[teamId] ??= []).push(onMsg)
+    ;(mockSubs[key] ??= []).push(onMsg)
     return {
       unsubscribe() {
-        mockSubs[teamId] = (mockSubs[teamId] ?? []).filter((c) => c !== onMsg)
+        mockSubs[key] = (mockSubs[key] ?? []).filter((c) => c !== onMsg)
       },
     }
   }
@@ -189,14 +194,15 @@ export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void): 
   // Уникальный topic на каждый вызов — иначе повторный вызов (напр. из-за
   // React StrictMode двойного монтирования эффекта в dev) создаёт второй канал
   // с тем же именем на том же сокете, и обе подписки начинают работать нестабильно.
-  const topic = `team-chat-${teamId}-${Math.random().toString(36).slice(2)}`
+  const topic = `chat-${key}-${Math.random().toString(36).slice(2)}`
   const ch = sb
     .channel(topic)
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'messages', filter: `team_id=eq.${teamId}` },
       (payload) => {
-        const m = payload.new as { id: string; author: string; text: string; created_at: string }
+        const m = payload.new as { id: string; author: string; text: string; created_at: string; channel: ChatChannel }
+        if (m.channel !== channel) return
         onMsg({ id: m.id, author: m.author, text: m.text, time: hhmm(m.created_at), me: m.author === getDisplayName() })
       },
     )

@@ -5,7 +5,7 @@ import {
   UserPlus, X, MessageSquare, Loader2,
 } from 'lucide-react'
 import {
-  CURRENT_TASK, GAMES, GAME_VIDEO, GAME_FILE, MENTOR_CONTACT,
+  CURRENT_TASK, GAMES, GAME_VIDEO, GAME_FILE,
   type TeamScore, type CaseItem,
 } from '../data/mock'
 import {
@@ -16,6 +16,7 @@ import {
 } from '../lib/db'
 import Stars from '../components/Stars'
 import VideoModal from '../components/VideoModal'
+import MentorChatModal from '../components/MentorChatModal'
 
 const diffColor: Record<string, string> = {
   Лёгкий: '#1ea672',
@@ -30,6 +31,7 @@ export default function TeamCabinet() {
   const [total, setTotal] = useState(0)
 
   const [videoOpen, setVideoOpen] = useState(false)
+  const [mentorChatOpen, setMentorChatOpen] = useState(false)
 
   const [cases, setCases] = useState<CaseItem[]>([])
   const [scores, setScores] = useState<Record<string, TeamScore>>({})
@@ -187,14 +189,21 @@ export default function TeamCabinet() {
           >
             <MessageCircle size={16} /> Чат в МАКС
           </a>
-          <a
-            href={MENTOR_CONTACT}
+          <button
+            onClick={() => setMentorChatOpen(true)}
             className="btn-alfa flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold"
           >
             <Send size={16} /> Написать тренеру
-          </a>
+          </button>
         </div>
       </motion.div>
+
+      <MentorChatModal
+        open={mentorChatOpen}
+        onClose={() => setMentorChatOpen(false)}
+        teamId={me.id}
+        teamName={me.name}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
         {/* ==== ЛЕВАЯ КОЛОНКА ==== */}

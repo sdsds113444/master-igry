@@ -95,8 +95,6 @@ export const GAME_FILE: Record<string, string> = {
   marathon: '/files/cases-marathon.xlsx',
 }
 
-/** Контакт тренера для кнопки «написать» (в бою — реальный МАКС/Telegram/почта). */
-export const MENTOR_CONTACT = 'mailto:trener.kc@alfabank.ru?subject=Герои%20на%20линии%20—%20команда%20KOYA-04'
 
 /* ---- Команды ---- */
 const NAMES = [

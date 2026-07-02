@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Megaphone, RefreshCw, Check, Plus, Trophy, Upload, Loader2 } from 'lucide-react'
+import { Megaphone, RefreshCw, Check, Plus, Trophy, Upload, Loader2, MessageCircle } from 'lucide-react'
 import { GAMES, CURRENT_GAME } from '../data/mock'
 import { listAllTeamsAdmin, getScoresForGame, gradeSubmission, type AdminTeamRow } from '../lib/db'
+import MentorChatModal from '../components/MentorChatModal'
 
 interface Grade {
   submitted: boolean
@@ -22,6 +23,7 @@ export default function Admin() {
 
   const [teams, setTeams] = useState<AdminTeamRow[]>([])
   const [grades, setGrades] = useState<Record<string, Grade>>({})
+  const [chatTeam, setChatTeam] = useState<AdminTeamRow | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -161,13 +163,20 @@ export default function Admin() {
                     <tr key={t.id} className="border-t border-black/5 hover:bg-white/40">
                       <td className="px-5 py-2.5">
                         <div className="flex items-center gap-2.5">
-                          <span className="grid h-8 w-8 place-items-center rounded-full text-xs font-extrabold text-white" style={{ background: `hsl(${t.hue} 70% 55%)` }}>
+                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-extrabold text-white" style={{ background: `hsl(${t.hue} 70% 55%)` }}>
                             {t.name.slice(0, 1)}
                           </span>
-                          <div>
-                            <div className="font-bold">{t.name}</div>
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate font-bold">{t.name}</div>
                             <div className="text-[11px] text-ink-soft">{t.code} · {t.site}</div>
                           </div>
+                          <button
+                            onClick={() => setChatTeam(t)}
+                            title="Чат с командой"
+                            className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa"
+                          >
+                            <MessageCircle size={15} />
+                          </button>
                         </div>
                       </td>
                       <td className="px-2 text-center">
@@ -226,6 +235,14 @@ export default function Admin() {
           </motion.button>
         </div>
       </div>
+
+      <MentorChatModal
+        open={!!chatTeam}
+        onClose={() => setChatTeam(null)}
+        teamId={chatTeam?.id ?? ''}
+        teamName={chatTeam?.name ?? ''}
+        asAdmin
+      />
     </div>
   )
 }
