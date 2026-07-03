@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Megaphone, RefreshCw, Check, Plus, Trophy, Upload, Loader2, MessageCircle } from 'lucide-react'
+import { Megaphone, RefreshCw, Check, Trophy, Loader2, MessageCircle } from 'lucide-react'
 import { type Game } from '../data/mock'
 import {
-  listAllTeamsAdmin, getScoresForGame, gradeSubmission, getGames, publishGame, pickCurrentGame,
+  listAllTeamsAdmin, getScoresForGame, gradeMany, getGames, publishGame, pickCurrentGame,
   type AdminTeamRow,
 } from '../lib/db'
 import MentorChatModal from '../components/MentorChatModal'
+import { teamAvatar } from '../lib/ui'
 
 interface Grade {
   submitted: boolean
@@ -24,6 +25,7 @@ export default function Admin() {
   const [publishing, setPublishing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [loading, setLoading] = useState(true)
 
   const [teams, setTeams] = useState<AdminTeamRow[]>([])
@@ -49,7 +51,7 @@ export default function Admin() {
       for (const t of ts) {
         const s = scores[t.id]
         init[t.id] = s
-          ? { submitted: s.cases > 0, cases: s.cases, bonus: s.bonus > 0, superBonus: s.superBonus > 0, fcr: s.fcr, feedback: s.feedback }
+          ? { submitted: s.cases > 0 || s.bonus > 0 || s.superBonus > 0 || !!s.feedback, cases: s.cases, bonus: s.bonus > 0, superBonus: s.superBonus > 0, fcr: s.fcr, feedback: s.feedback }
           : { submitted: false, cases: 0, bonus: false, superBonus: false, fcr: 0, feedback: '' }
       }
       setTeams(ts)
@@ -71,38 +73,51 @@ export default function Admin() {
 
   async function saveAll() {
     setSaving(true)
-    await Promise.all(
-      teams.map((t) => {
-        const g = grades[t.id]
-        return gradeSubmission({
-          teamId: t.id, gameId,
-          cases: g.submitted ? g.cases : 0,
-          bonus: g.submitted && g.bonus ? 1 : 0,
-          superBonus: g.submitted && g.superBonus ? 3 : 0,
-          fcr: g.fcr,
-          feedback: g.feedback,
-        })
-      }),
-    )
-    setSaving(false)
-    setSaved(true)
+    setSaveError('')
+    try {
+      // Один пакетный upsert вместо 30 отдельных запросов.
+      await gradeMany(
+        teams.map((t) => {
+          const g = grades[t.id]
+          return {
+            teamId: t.id, gameId,
+            cases: g.submitted ? g.cases : 0,
+            bonus: g.submitted && g.bonus ? 1 : 0,
+            superBonus: g.submitted && g.superBonus ? 3 : 0,
+            fcr: g.fcr,
+            feedback: g.feedback,
+          }
+        }),
+      )
+      setSaved(true)
+    } catch {
+      setSaveError('Не удалось сохранить баллы. Проверьте соединение и попробуйте ещё раз.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function publish() {
     if (!gameId || publishing) return
     setPublishing(true)
-    await publishGame(gameId)
-    setGames(await getGames()) // подтянуть новый статус игры
-    setPublishing(false)
-    setPublished(true)
+    setSaveError('')
+    try {
+      await publishGame(gameId)
+      setGames(await getGames()) // подтянуть новый статус игры
+      setPublished(true)
+    } catch {
+      setSaveError('Не удалось опубликовать задание. Попробуйте ещё раз.')
+    } finally {
+      setPublishing(false)
+    }
   }
 
   return (
     <div className="space-y-6">
       {/* Заголовок */}
-      <div className="glass-strong flex flex-wrap items-center gap-4 rounded-[28px] p-5">
+      <div className="glass-strong flex flex-wrap items-center gap-4 rounded-glass p-5">
         <img
-          src="/koya/koya-sit-crop.jpg"
+          src="/koya/koya-sit-crop.webp"
           alt="КОЯ"
           className="h-14 w-14 shrink-0 rounded-3xl object-cover shadow-md ring-2 ring-white/70"
           style={{ objectPosition: 'center 12%' }}
@@ -111,21 +126,21 @@ export default function Admin() {
           <h1 className="font-display text-2xl font-extrabold">Панель организатора</h1>
           <p className="text-sm text-ink-soft">Выкладывайте задания, принимайте ответы, ставьте баллы.</p>
         </div>
-        <div className="rounded-2xl bg-white/60 px-4 py-2 text-center">
-          <div className="font-display text-xl font-extrabold">{submittedCount}/{teams.length || 30}</div>
-          <div className="text-[11px] font-semibold text-ink-soft">сдали ответ</div>
+        <div className="rounded-2xl sf-1 px-4 py-2 text-center">
+          <div className="font-display text-xl font-bold">{submittedCount}/{teams.length || 30}</div>
+          <div className="text-xs font-semibold text-ink-soft">сдали ответ</div>
         </div>
       </div>
 
       {/* Выбор игры + публикация */}
-      <div className="glass rounded-[28px] p-5">
+      <div className="glass rounded-glass p-5">
         <div className="flex flex-wrap items-end gap-4">
           <label className="block">
-            <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-ink-soft">Игра недели</span>
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">Игра недели</span>
             <select
               value={gameId}
               onChange={(e) => setGameId(e.target.value)}
-              className="rounded-2xl border border-black/5 bg-white/70 px-4 py-2.5 text-sm font-bold outline-none focus:border-alfa/40"
+              className="rounded-2xl border border-black/5 sf-2 px-4 py-2.5 text-sm font-bold outline-none focus:border-alfa/40"
             >
               {games.map((g) => (
                 <option key={g.id} value={g.id}>
@@ -134,13 +149,6 @@ export default function Admin() {
               ))}
             </select>
           </label>
-
-          <button className="flex items-center gap-2 rounded-2xl bg-white/70 px-4 py-2.5 text-sm font-bold transition-colors hover:bg-white">
-            <Upload size={16} /> Прикрепить кейсы (.xlsx)
-          </button>
-          <button className="flex items-center gap-2 rounded-2xl bg-white/70 px-4 py-2.5 text-sm font-bold transition-colors hover:bg-white">
-            <Plus size={16} /> Добавить мультик
-          </button>
 
           <button
             onClick={publish}
@@ -157,9 +165,9 @@ export default function Admin() {
       </div>
 
       {/* Таблица оценивания */}
-      <div className="glass-strong overflow-hidden rounded-[28px]">
+      <div className="glass-strong overflow-hidden rounded-glass">
         <div className="flex items-center justify-between border-b border-black/5 px-5 py-4">
-          <h2 className="font-display text-lg font-extrabold">Оценивание команд</h2>
+          <h2 className="font-display text-lg font-bold">Оценивание команд</h2>
           <div className="text-xs font-semibold text-ink-soft">
             Шкала: 0 — не сдал · 1 — &gt;3 ошибок · 2 — &lt;3 ошибок · 3 — без ошибок (за каждый кейс)
           </div>
@@ -170,15 +178,17 @@ export default function Admin() {
             <Loader2 className="animate-spin" />
           </div>
         ) : (
-          <div className="max-h-[540px] overflow-auto">
+          <>
+          <div className="hidden max-h-[540px] overflow-auto md:block">
             <table className="w-full min-w-[720px] text-sm">
-              <thead className="sticky top-0 z-10 bg-white/80 backdrop-blur">
-                <tr className="text-left text-[11px] font-bold uppercase tracking-wide text-ink-soft">
+              <thead className="sticky top-0 z-10 sf-3 backdrop-blur">
+                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-ink-soft">
                   <th className="px-5 py-2.5">Команда</th>
                   <th className="px-2 py-2.5 text-center">Сдала</th>
                   <th className="px-2 py-2.5 text-center">Очки за кейсы</th>
                   <th className="px-2 py-2.5 text-center">Бонус +1</th>
                   <th className="px-2 py-2.5 text-center">Супер +3</th>
+                  <th className="px-2 py-2.5 text-center">FCR %</th>
                   <th className="px-2 py-2.5 text-left">ОС тренера</th>
                   <th className="px-4 py-2.5 text-right">Итог</th>
                 </tr>
@@ -188,22 +198,23 @@ export default function Admin() {
                   const g = grades[t.id]
                   const sum = (g.submitted ? g.cases : 0) + (g.bonus ? 1 : 0) + (g.superBonus ? 3 : 0)
                   return (
-                    <tr key={t.id} className="border-t border-black/5 hover:bg-white/40">
+                    <tr key={t.id} className="border-t border-black/5 sf-hoversoft">
                       <td className="px-5 py-2.5">
                         <div className="flex items-center gap-2.5">
-                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-extrabold text-white" style={{ background: `hsl(${t.hue} 70% 55%)` }}>
+                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-extrabold" style={{ background: teamAvatar(t.hue).bg, color: teamAvatar(t.hue).fg }}>
                             {t.name.slice(0, 1)}
                           </span>
                           <div className="min-w-0 flex-1">
                             <div className="truncate font-bold">{t.name}</div>
-                            <div className="text-[11px] text-ink-soft">{t.code} · {t.site}</div>
+                            <div className="text-xs text-ink-soft">{t.code} · {t.site}</div>
                           </div>
                           <button
                             onClick={() => setChatTeam(t)}
+                            aria-label={`Чат с командой ${t.name}`}
                             title="Чат с командой"
-                            className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa"
+                            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa"
                           >
-                            <MessageCircle size={15} />
+                            <MessageCircle size={16} />
                           </button>
                         </div>
                       </td>
@@ -212,7 +223,7 @@ export default function Admin() {
                           type="checkbox"
                           checked={g.submitted}
                           onChange={(e) => upd(t.id, { submitted: e.target.checked })}
-                          className="h-4 w-4 accent-[var(--color-alfa)]"
+                          className="h-5 w-5 accent-[var(--color-alfa)]"
                         />
                       </td>
                       <td className="px-2 text-center">
@@ -221,14 +232,23 @@ export default function Admin() {
                           value={g.cases}
                           disabled={!g.submitted}
                           onChange={(e) => upd(t.id, { cases: Math.max(0, Math.min(30, +e.target.value)) })}
-                          className="w-16 rounded-lg border border-black/10 bg-white/80 px-2 py-1 text-center font-bold outline-none focus:border-alfa/50 disabled:opacity-40"
+                          className="w-16 rounded-lg border border-black/10 sf-3 px-2 py-1 text-center font-bold outline-none focus:border-alfa/50 disabled:opacity-40"
                         />
                       </td>
                       <td className="px-2 text-center">
-                        <input type="checkbox" checked={g.bonus} disabled={!g.submitted} onChange={(e) => upd(t.id, { bonus: e.target.checked })} className="h-4 w-4 accent-[var(--color-alfa)] disabled:opacity-40" />
+                        <input type="checkbox" checked={g.bonus} disabled={!g.submitted} onChange={(e) => upd(t.id, { bonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-alfa)] disabled:opacity-40" />
                       </td>
                       <td className="px-2 text-center">
-                        <input type="checkbox" checked={g.superBonus} disabled={!g.submitted} onChange={(e) => upd(t.id, { superBonus: e.target.checked })} className="h-4 w-4 accent-[var(--color-gold)] disabled:opacity-40" />
+                        <input type="checkbox" checked={g.superBonus} disabled={!g.submitted} onChange={(e) => upd(t.id, { superBonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-gold)] disabled:opacity-40" />
+                      </td>
+                      <td className="px-2 text-center">
+                        <input
+                          type="number" min={0} max={100}
+                          value={g.fcr}
+                          disabled={!g.submitted}
+                          onChange={(e) => upd(t.id, { fcr: Math.max(0, Math.min(100, +e.target.value)) })}
+                          className="w-16 rounded-lg border border-black/10 sf-3 px-2 py-1 text-center font-bold outline-none focus:border-alfa/50 disabled:opacity-40"
+                        />
                       </td>
                       <td className="px-2">
                         <input
@@ -236,22 +256,42 @@ export default function Admin() {
                           disabled={!g.submitted}
                           onChange={(e) => upd(t.id, { feedback: e.target.value })}
                           placeholder="комментарий команде…"
-                          className="w-52 rounded-lg border border-black/10 bg-white/80 px-2 py-1 text-xs outline-none focus:border-alfa/50 disabled:opacity-40"
+                          className="w-52 rounded-lg border border-black/10 sf-3 px-2 py-1 text-xs outline-none focus:border-alfa/50 disabled:opacity-40"
                         />
                       </td>
-                      <td className="px-4 text-right font-display text-base font-extrabold">{sum}</td>
+                      <td className="px-4 text-right text-base font-bold">{sum}</td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           </div>
+
+          {/* Мобильная раскладка: каждая команда — карточка со столбиком полей */}
+          <div className="space-y-3 p-4 md:hidden">
+            {teams.map((t) => (
+              <GradeCard
+                key={t.id}
+                t={t}
+                g={grades[t.id]}
+                onChange={(patch) => upd(t.id, patch)}
+                onChat={() => setChatTeam(t)}
+              />
+            ))}
+          </div>
+          </>
         )}
 
         <div className="flex items-center justify-between gap-3 border-t border-black/5 px-5 py-4">
-          <div className="flex items-center gap-2 text-sm text-ink-soft">
-            <Trophy size={16} style={{ color: 'var(--color-gold)' }} />
-            После сохранения рейтинг на доске обновится автоматически.
+          <div className="flex items-center gap-2 text-sm">
+            {saveError ? (
+              <span className="font-semibold text-danger" role="alert">{saveError}</span>
+            ) : (
+              <span className="flex items-center gap-2 text-ink-soft">
+                <Trophy size={16} style={{ color: 'var(--color-gold)' }} />
+                После сохранения рейтинг на доске обновится автоматически.
+              </span>
+            )}
           </div>
           <motion.button
             whileTap={{ scale: 0.97 }}
@@ -271,6 +311,102 @@ export default function Admin() {
         teamName={chatTeam?.name ?? ''}
         asAdmin
       />
+    </div>
+  )
+}
+
+/** Карточка оценивания одной команды для мобильной раскладки (замена строки таблицы). */
+function GradeCard({
+  t, g, onChange, onChat,
+}: {
+  t: AdminTeamRow
+  g: Grade
+  onChange: (patch: Partial<Grade>) => void
+  onChat: () => void
+}) {
+  const sum = (g.submitted ? g.cases : 0) + (g.bonus ? 1 : 0) + (g.superBonus ? 3 : 0)
+  const fieldCls =
+    'w-full rounded-lg border border-black/10 sf-3 px-2 py-1.5 text-center font-bold outline-none focus:border-alfa/50 disabled:opacity-40'
+  return (
+    <div className="glass rounded-2xl p-4">
+      <div className="flex items-center gap-2.5">
+        <span
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-extrabold"
+          style={{ background: teamAvatar(t.hue).bg, color: teamAvatar(t.hue).fg }}
+        >
+          {t.name.slice(0, 1)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-bold">{t.name}</div>
+          <div className="text-xs text-ink-soft">{t.code} · {t.site}</div>
+        </div>
+        <div className="text-right">
+          <div className="text-xs font-semibold text-ink-soft">Итог</div>
+          <div className="text-lg font-bold leading-none">{sum}</div>
+        </div>
+        <button
+          onClick={onChat}
+          aria-label={`Чат с командой ${t.name}`}
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa"
+        >
+          <MessageCircle size={16} />
+        </button>
+      </div>
+
+      <label className="mt-3 flex items-center justify-between gap-3 rounded-xl sf-1 px-3 py-2">
+        <span className="text-sm font-semibold">Команда сдала ответ</span>
+        <input
+          type="checkbox"
+          checked={g.submitted}
+          onChange={(e) => onChange({ submitted: e.target.checked })}
+          className="h-5 w-5 accent-[var(--color-alfa)]"
+        />
+      </label>
+
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">Очки за кейсы</span>
+          <input
+            type="number" min={0} max={30}
+            value={g.cases}
+            disabled={!g.submitted}
+            onChange={(e) => onChange({ cases: Math.max(0, Math.min(30, +e.target.value)) })}
+            className={fieldCls}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">FCR %</span>
+          <input
+            type="number" min={0} max={100}
+            value={g.fcr}
+            disabled={!g.submitted}
+            onChange={(e) => onChange({ fcr: Math.max(0, Math.min(100, +e.target.value)) })}
+            className={fieldCls}
+          />
+        </label>
+      </div>
+
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <label className="flex items-center justify-between gap-2 rounded-lg sf-1 px-3 py-2 text-sm font-semibold">
+          Бонус +1
+          <input type="checkbox" checked={g.bonus} disabled={!g.submitted} onChange={(e) => onChange({ bonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-alfa)] disabled:opacity-40" />
+        </label>
+        <label className="flex items-center justify-between gap-2 rounded-lg sf-1 px-3 py-2 text-sm font-semibold">
+          Супер +3
+          <input type="checkbox" checked={g.superBonus} disabled={!g.submitted} onChange={(e) => onChange({ superBonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-gold)] disabled:opacity-40" />
+        </label>
+      </div>
+
+      <label className="mt-2 block">
+        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">ОС тренера</span>
+        <input
+          value={g.feedback}
+          disabled={!g.submitted}
+          onChange={(e) => onChange({ feedback: e.target.value })}
+          placeholder="комментарий команде…"
+          className="w-full rounded-lg border border-black/10 sf-3 px-3 py-2 text-sm outline-none focus:border-alfa/50 disabled:opacity-40"
+        />
+      </label>
     </div>
   )
 }

@@ -10,11 +10,10 @@ import {
   TEAMS, GAMES, FEED, ROSTER_SEED, TEAM_CHAT_SEED,
   type TeamScore, type CaseItem, type Game, type FeedItem,
 } from '../data/mock'
-import { GAME_CASES } from '../data/cases'
 
 export type Role = 'player' | 'admin'
 export interface Session { teamId: string | null; code: string; role: Role; name: string; hue: number }
-export interface ChatMsg { id: string; author: string; text: string; time: string; me: boolean }
+export interface ChatMsg { id: string; author: string; text: string; time: string; me: boolean; role: Role }
 export interface RatingRow { id: string; rank: number; name: string; site: string; hue: number; total: number }
 export interface TeamInfo {
   id: string; code: string; name: string; site: string; mentor: string; hue: number; coins: number
@@ -22,7 +21,23 @@ export interface TeamInfo {
 export interface AdminTeamRow { id: string; code: string; name: string; site: string; hue: number }
 export interface GradeRow { cases: number; bonus: number; superBonus: number; fcr: number; feedback: string }
 
-const MOCK_ADMIN_CODE = 'ADMIN-DEMO-9F3A'
+// Демо-код админки ТОЛЬКО для офлайн-режима (моки, без реальных данных).
+// Боевой админ-код хранится в БД и НИКОГДА не попадает в репозиторий/бандл.
+export const MOCK_ADMIN_CODE = 'DEMO-ADMIN'
+
+/** Бросает ошибку supabase-js вместо молчаливого игнорирования { error }.
+ *  Нужен, чтобы страницы могли откатить оптимистичный UI и показать сбой. */
+function throwOn(error: unknown) {
+  if (error) throw error
+}
+
+/** «Это моё сообщение?» — от роли текущей сессии, не от совпадения имени.
+ *  Тренер (админ) считает своими сообщения с ролью admin; игрок — свои по подписи. */
+function computeMe(author: string, role: Role): boolean {
+  const ses = getSession()
+  if (ses?.role === 'admin') return role === 'admin'
+  return role !== 'admin' && author === getDisplayName()
+}
 
 // ---------- локальная «сессия» (какая команда сейчас вошла) ----------
 const SESSION_KEY = 'mi.session'
@@ -129,7 +144,8 @@ export async function addPlayer(teamId: string, name: string): Promise<void> {
     ;(mockRoster[teamId] ??= [...ROSTER_SEED]).push(n)
     return
   }
-  await requireClient().from('roster').insert({ team_id: teamId, full_name: n, is_captain: false })
+  const { error } = await requireClient().from('roster').insert({ team_id: teamId, full_name: n, is_captain: false })
+  throwOn(error)
 }
 
 export async function removePlayer(teamId: string, name: string): Promise<void> {
@@ -137,7 +153,8 @@ export async function removePlayer(teamId: string, name: string): Promise<void> 
     mockRoster[teamId] = (mockRoster[teamId] ?? []).filter((p) => p !== name)
     return
   }
-  await requireClient().from('roster').delete().eq('team_id', teamId).eq('full_name', name)
+  const { error } = await requireClient().from('roster').delete().eq('team_id', teamId).eq('full_name', name)
+  throwOn(error)
 }
 
 // =====================================================================
@@ -150,20 +167,26 @@ function hhmm(iso: string): string {
 export type ChatChannel = 'team' | 'mentor'
 
 export async function listMessages(teamId: string, channel: ChatChannel = 'team'): Promise<ChatMsg[]> {
-  const meName = getDisplayName()
   const key = `${teamId}:${channel}`
   if (!isSupabaseConfigured) {
-    return mockChat[key] ?? (mockChat[key] = channel === 'team' ? TEAM_CHAT_SEED.map((m, i) => ({ id: 's' + i, ...m })) : [])
+    return mockChat[key] ?? (mockChat[key] = channel === 'team' ? TEAM_CHAT_SEED.map((m, i) => ({ id: 's' + i, role: 'player' as Role, ...m })) : [])
   }
   const sb = requireClient()
-  const { data } = await sb.from('messages').select('*').eq('team_id', teamId).eq('channel', channel).order('created_at')
-  return (data ?? []).map((m) => ({
-    id: m.id as string,
-    author: m.author as string,
-    text: m.text as string,
-    time: hhmm(m.created_at as string),
-    me: (m.author as string) === meName,
-  }))
+  // .limit — не тянем весь растущий чат целиком (последние 200 сообщений).
+  const { data, error } = await sb.from('messages').select('*')
+    .eq('team_id', teamId).eq('channel', channel).order('created_at', { ascending: false }).limit(200)
+  throwOn(error)
+  return (data ?? []).reverse().map((m) => {
+    const role = ((m.sender_role as Role) ?? 'player')
+    return {
+      id: m.id as string,
+      author: m.author as string,
+      text: m.text as string,
+      time: hhmm(m.created_at as string),
+      role,
+      me: computeMe(m.author as string, role),
+    }
+  })
 }
 
 export async function sendMessage(teamId: string, author: string, text: string, channel: ChatChannel = 'team'): Promise<void> {
@@ -171,12 +194,16 @@ export async function sendMessage(teamId: string, author: string, text: string, 
   if (!t) return
   const key = `${teamId}:${channel}`
   if (!isSupabaseConfigured) {
-    const msg: ChatMsg = { id: 'm' + Math.random().toString(36).slice(2), author, text: t, time: 'только что', me: true }
+    const role: Role = getSession()?.role === 'admin' ? 'admin' : 'player'
+    const msg: ChatMsg = { id: 'm' + Math.random().toString(36).slice(2), author, text: t, time: 'только что', me: true, role }
     ;(mockChat[key] ??= []).push(msg)
     ;(mockSubs[key] ?? []).forEach((cb) => cb(msg))
     return
   }
-  await requireClient().from('messages').insert({ team_id: teamId, author, text: t, channel })
+  // author — только косметическая подпись игрока. Роль отправителя (тренер/игрок)
+  // проставляет СЕРВЕР триггером по auth-сессии, клиент не может выдать себя за тренера.
+  const { error } = await requireClient().from('messages').insert({ team_id: teamId, author, text: t, channel })
+  throwOn(error)
 }
 
 /** Подписка на новые сообщения (командный чат или личный с тренером). Возвращает объект с .unsubscribe(). */
@@ -201,9 +228,10 @@ export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void, c
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'messages', filter: `team_id=eq.${teamId}` },
       (payload) => {
-        const m = payload.new as { id: string; author: string; text: string; created_at: string; channel: ChatChannel }
+        const m = payload.new as { id: string; author: string; text: string; created_at: string; channel: ChatChannel; sender_role?: Role }
         if (m.channel !== channel) return
-        onMsg({ id: m.id, author: m.author, text: m.text, time: hhmm(m.created_at), me: m.author === getDisplayName() })
+        const role = m.sender_role ?? 'player'
+        onMsg({ id: m.id, author: m.author, text: m.text, time: hhmm(m.created_at), role, me: computeMe(m.author, role) })
       },
     )
     .subscribe()
@@ -219,6 +247,9 @@ export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void, c
 // =====================================================================
 export async function getCases(gameId: string): Promise<CaseItem[]> {
   if (!isSupabaseConfigured) {
+    // Ленивый импорт: файл с 73 кейсами (~42 КБ) не попадает в главный бандл,
+    // а подгружается только в демо-режиме, когда реально нужен.
+    const { GAME_CASES } = await import('../data/cases')
     return GAME_CASES[gameId] ?? []
   }
   const sb = requireClient()
@@ -268,16 +299,17 @@ export async function submitAnswer(input: SubmitInput): Promise<void> {
     mockSubmissions[`${input.teamId}:${input.gameId}`] = { answer: input.answer, fileName: input.fileName ?? null }
     return
   }
-  await requireClient().from('answers').upsert(
+  const { error } = await requireClient().from('answers').upsert(
     { team_id: input.teamId, game_id: input.gameId, text: input.answer, file_url: input.fileName ?? null },
     { onConflict: 'team_id,game_id' },
   )
+  throwOn(error)
 }
 
 export interface GradeInput { teamId: string; gameId: string; cases: number; bonus: number; superBonus: number; fcr: number; feedback: string }
 export async function gradeSubmission(input: GradeInput): Promise<void> {
   if (!isSupabaseConfigured) return
-  await requireClient().from('scores').upsert(
+  const { error } = await requireClient().from('scores').upsert(
     {
       team_id: input.teamId, game_id: input.gameId,
       cases: input.cases, bonus: input.bonus, super_bonus: input.superBonus,
@@ -285,6 +317,19 @@ export async function gradeSubmission(input: GradeInput): Promise<void> {
     },
     { onConflict: 'team_id,game_id' },
   )
+  throwOn(error)
+}
+
+/** Пакетное сохранение баллов всей игры одним запросом (вместо 30 отдельных upsert). */
+export async function gradeMany(inputs: GradeInput[]): Promise<void> {
+  if (!isSupabaseConfigured || inputs.length === 0) return
+  const rows = inputs.map((i) => ({
+    team_id: i.teamId, game_id: i.gameId,
+    cases: i.cases, bonus: i.bonus, super_bonus: i.superBonus,
+    fcr: i.fcr, feedback: i.feedback,
+  }))
+  const { error } = await requireClient().from('scores').upsert(rows, { onConflict: 'team_id,game_id' })
+  throwOn(error)
 }
 
 // =====================================================================
@@ -361,7 +406,8 @@ export async function listFeed(): Promise<FeedRow[]> {
     return FEED.map((f) => ({ id: f.id, kind: f.kind, title: f.title, text: f.text, date: f.date, emoji: f.emoji, gameId: null }))
   }
   const sb = requireClient()
-  const { data } = await sb.from('feed_items').select('*').order('created_at', { ascending: false })
+  const { data, error } = await sb.from('feed_items').select('*').order('created_at', { ascending: false }).limit(50)
+  throwOn(error)
   return (data ?? []).map((f) => ({
     id: f.id as string,
     kind: f.kind as FeedItem['kind'],
@@ -376,5 +422,6 @@ export async function listFeed(): Promise<FeedRow[]> {
 /** Опубликовать задание недели: игра → 'current', прошлые current → 'done', запись в ленту. Только админ. */
 export async function publishGame(gameId: string): Promise<void> {
   if (!isSupabaseConfigured) return
-  await requireClient().rpc('publish_game', { p_game_id: gameId })
+  const { error } = await requireClient().rpc('publish_game', { p_game_id: gameId })
+  throwOn(error)
 }

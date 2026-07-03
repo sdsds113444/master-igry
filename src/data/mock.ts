@@ -2,8 +2,6 @@
    Данные ненастоящие — для демонстрации визуала и логики.
    Позже заменим на Supabase (реальные команды/баллы/задания). */
 
-import { GAME_CASES } from './cases'
-
 export type GameStatus = 'done' | 'current' | 'locked'
 
 export interface Game {
@@ -172,18 +170,6 @@ export const FEED: FeedItem[] = [
   { id: 'f4', kind: 'announce', emoji: '🏆', title: 'Супер-бонус недели 3', text: '+3 очка команде с лучшим FCR. Поздравляем!', date: 'Пятница, 17:10' },
 ]
 
-/* ---- Задание недели (кабинет команды) ---- */
-export const CURRENT_TASK = {
-  gameId: CURRENT_GAME.id,
-  title: CURRENT_GAME.title,
-  skill: CURRENT_GAME.skill,
-  deadline: 'Пятница, 15:00 МСК',
-  videoTitle: 'Мультик КОЯ — эпизод 4',
-  fileName: 'cases-empathy.xlsx',
-  totalCases: GAME_CASES[CURRENT_GAME.id].length,
-  cases: GAME_CASES[CURRENT_GAME.id] as CaseItem[],
-}
-
 /* ---- Состав команды (капитан редактирует) ---- */
 export const ROSTER_SEED = [
   'Иванов Иван (капитан)', 'Петров Пётр', 'Сидоров Сидор', 'Кузнецов Кирилл', 'Смирнова Анна',
@@ -208,9 +194,12 @@ export const RULES = [
   { icon: '🏆', title: 'Победитель', text: 'Команда с наибольшей суммой баллов за сезон. Итоги — в конце сезона.' },
 ]
 
-/* ---- Призы (из презы) ---- */
+/* ---- Призы (из презы) ----
+   accent — для мягкого свечения карточки (box-shadow).
+   chipBg / chipFg — доступная пара для бейджа «место» (раньше белый текст на
+   золоте/серебре давал 1.6:1, теперь каждая пара ≥5.7:1). */
 export const PRIZES = [
-  { place: '1 место', emoji: '🥇', title: 'Корпоратив на 100 000 ₽', text: 'Организация праздника для команды-победителя + большой мерч.', accent: '#ffc244' },
-  { place: '2–3 место', emoji: '🥈', title: 'Мерч Альфы', text: 'Фирменные наборы каждому участнику команды.', accent: '#c9cdd6' },
-  { place: 'Все участники', emoji: '🐾', title: 'КОЯ-койны', text: 'Койны за активность, которые копятся весь сезон.', accent: '#ef3124' },
+  { place: '1 место', emoji: '🥇', title: 'Корпоратив на 100 000 ₽', text: 'Организация праздника для команды-победителя + большой мерч.', accent: '#ffc244', chipBg: '#ffc244', chipFg: '#4a3400' },
+  { place: '2–3 место', emoji: '🥈', title: 'Мерч Альфы', text: 'Фирменные наборы каждому участнику команды.', accent: '#c9cdd6', chipBg: '#c9cdd6', chipFg: '#2c3038' },
+  { place: 'Все участники', emoji: '🐾', title: 'КОЯ-койны', text: 'Койны за активность, которые копятся весь сезон.', accent: '#ef3124', chipBg: '#c81e12', chipFg: '#ffffff' },
 ]

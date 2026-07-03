@@ -1,5 +1,5 @@
-import { AnimatePresence, motion } from 'framer-motion'
-import { X } from 'lucide-react'
+import { Film } from 'lucide-react'
+import Dialog from './Dialog'
 
 /** Модалка с видео-плеером для «мультиков КОЯ». */
 export default function VideoModal({
@@ -7,54 +7,36 @@ export default function VideoModal({
   onClose,
   title,
   src,
+  captions,
 }: {
   open: boolean
   onClose: () => void
   title: string
   src: string
+  /** Путь к .vtt-дорожке субтитров (WCAG 1.2.2). Когда появятся файлы —
+   *  просто передавайте сюда путь, и субтитры включатся автоматически. */
+  captions?: string
 }) {
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          className="fixed inset-0 z-50 grid place-items-center p-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-        >
-          <div className="absolute inset-0 bg-black/55 backdrop-blur-sm" onClick={onClose} />
-          <motion.div
-            className="glass-strong relative z-10 w-full max-w-3xl overflow-hidden rounded-[28px] p-3"
-            initial={{ scale: 0.94, y: 12 }}
-            animate={{ scale: 1, y: 0 }}
-            exit={{ scale: 0.96, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 200, damping: 22 }}
-          >
-            <div className="flex items-center justify-between px-2 py-2">
-              <div className="flex items-center gap-2 font-display text-[15px] font-extrabold">
-                🎬 {title}
-              </div>
-              <button
-                onClick={onClose}
-                className="grid h-9 w-9 place-items-center rounded-full bg-white/60 text-ink-soft transition-colors hover:bg-white hover:text-alfa"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="overflow-hidden rounded-2xl bg-black">
-              <video
-                src={src}
-                poster="/koya/koya-hero-crop.jpg"
-                controls
-                className="aspect-video w-full"
-              />
-            </div>
-            <p className="px-2 py-2 text-xs text-ink-soft">
-              Мультик КОЯ — эпизод недели. Посмотрите всей командой перед тем, как решать кейсы 🐾
-            </p>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      ariaLabel={title || 'Видео'}
+      panelClassName="w-full max-w-3xl"
+      title={<><Film size={17} className="shrink-0 text-alfa" /> <span className="truncate">{title}</span></>}
+    >
+      <div className="p-3 pt-2">
+        <div className="overflow-hidden rounded-2xl bg-black">
+          <video src={src} poster="/koya/koya-hero-crop.webp" controls className="aspect-video w-full">
+            {captions && (
+              <track kind="captions" src={captions} srcLang="ru" label="Русские субтитры" default />
+            )}
+          </video>
+        </div>
+        <p className="px-1 pt-2 text-xs text-ink-soft">
+          Мультик КОЯ — эпизод недели. Посмотрите всей командой перед тем, как решать кейсы <span aria-hidden="true">🐾</span>
+        </p>
+      </div>
+    </Dialog>
   )
 }
