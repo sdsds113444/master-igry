@@ -472,7 +472,8 @@ export default function TeamCabinet() {
               {games.filter((g) => g.status !== 'locked').map((g) => {
                 const s = scores[g.id]
                 if (!s) return null
-                const sum = s.cases + s.bonus + s.superBonus
+                const superVok = s.superBonusVok ?? 0
+                const sum = s.cases + s.bonus + s.superBonus + superVok
                 return (
                   <div key={g.id} className="rounded-2xl sf-1 p-3">
                     <div className="flex items-center gap-3">
@@ -482,12 +483,13 @@ export default function TeamCabinet() {
                         <div className="text-xs font-semibold text-ink-soft">
                           кейсы {s.cases}
                           {s.bonus > 0 && ` · бонус +${s.bonus}`}
-                          {s.superBonus > 0 && ` · супер +${s.superBonus}`}
+                          {s.superBonus > 0 && ` · супер FCR +${s.superBonus}`}
+                          {superVok > 0 && ` · супер ВОК +${superVok}`}
                         </div>
                       </div>
                       <div className="flex items-center gap-1 text-base font-bold">
                         {sum > 0 ? sum : '—'}
-                        {s.superBonus > 0 && <Star size={13} style={{ color: 'var(--color-gold)' }} fill="currentColor" />}
+                        {(s.superBonus > 0 || superVok > 0) && <Star size={13} style={{ color: 'var(--color-gold)' }} fill="currentColor" />}
                       </div>
                     </div>
                     {s.feedback && (

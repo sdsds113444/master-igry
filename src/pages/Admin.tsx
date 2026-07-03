@@ -15,6 +15,8 @@ interface Grade {
   bonus: boolean
   superBonus: boolean
   fcr: number
+  vok: number
+  superBonusVok: boolean
   feedback: string
 }
 
@@ -51,8 +53,8 @@ export default function Admin() {
       for (const t of ts) {
         const s = scores[t.id]
         init[t.id] = s
-          ? { submitted: s.cases > 0 || s.bonus > 0 || s.superBonus > 0 || !!s.feedback, cases: s.cases, bonus: s.bonus > 0, superBonus: s.superBonus > 0, fcr: s.fcr, feedback: s.feedback }
-          : { submitted: false, cases: 0, bonus: false, superBonus: false, fcr: 0, feedback: '' }
+          ? { submitted: s.cases > 0 || s.bonus > 0 || s.superBonus > 0 || s.superBonusVok > 0 || s.fcr > 0 || s.vok > 0 || !!s.feedback, cases: s.cases, bonus: s.bonus > 0, superBonus: s.superBonus > 0, fcr: s.fcr, vok: s.vok, superBonusVok: s.superBonusVok > 0, feedback: s.feedback }
+          : { submitted: false, cases: 0, bonus: false, superBonus: false, fcr: 0, vok: 0, superBonusVok: false, feedback: '' }
       }
       setTeams(ts)
       setGrades(init)
@@ -85,6 +87,8 @@ export default function Admin() {
             bonus: g.submitted && g.bonus ? 1 : 0,
             superBonus: g.submitted && g.superBonus ? 3 : 0,
             fcr: g.fcr,
+            vok: g.vok,
+            superBonusVok: g.submitted && g.superBonusVok ? 3 : 0,
             feedback: g.feedback,
           }
         }),
@@ -180,15 +184,17 @@ export default function Admin() {
         ) : (
           <>
           <div className="hidden max-h-[540px] overflow-auto md:block">
-            <table className="w-full min-w-[720px] text-sm">
+            <table className="w-full min-w-[900px] text-sm">
               <thead className="sticky top-0 z-10 sf-3 backdrop-blur">
                 <tr className="text-left text-xs font-semibold uppercase tracking-wide text-ink-soft">
                   <th className="px-5 py-2.5">Команда</th>
                   <th className="px-2 py-2.5 text-center">Сдала</th>
                   <th className="px-2 py-2.5 text-center">Очки за кейсы</th>
                   <th className="px-2 py-2.5 text-center">Бонус +1</th>
-                  <th className="px-2 py-2.5 text-center">Супер +3</th>
                   <th className="px-2 py-2.5 text-center">FCR %</th>
+                  <th className="px-2 py-2.5 text-center">Супер +3<br/>FCR</th>
+                  <th className="px-2 py-2.5 text-center">ВОК %</th>
+                  <th className="px-2 py-2.5 text-center">Супер +3<br/>ВОК</th>
                   <th className="px-2 py-2.5 text-left">ОС тренера</th>
                   <th className="px-4 py-2.5 text-right">Итог</th>
                 </tr>
@@ -196,7 +202,7 @@ export default function Admin() {
               <tbody>
                 {teams.map((t) => {
                   const g = grades[t.id]
-                  const sum = (g.submitted ? g.cases : 0) + (g.bonus ? 1 : 0) + (g.superBonus ? 3 : 0)
+                  const sum = (g.submitted ? g.cases : 0) + (g.bonus ? 1 : 0) + (g.superBonus ? 3 : 0) + (g.superBonusVok ? 3 : 0)
                   return (
                     <tr key={t.id} className="border-t border-black/5 sf-hoversoft">
                       <td className="px-5 py-2.5">
@@ -239,9 +245,6 @@ export default function Admin() {
                         <input type="checkbox" checked={g.bonus} disabled={!g.submitted} onChange={(e) => upd(t.id, { bonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-alfa)] disabled:opacity-40" />
                       </td>
                       <td className="px-2 text-center">
-                        <input type="checkbox" checked={g.superBonus} disabled={!g.submitted} onChange={(e) => upd(t.id, { superBonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-gold)] disabled:opacity-40" />
-                      </td>
-                      <td className="px-2 text-center">
                         <input
                           type="number" min={0} max={100}
                           value={g.fcr}
@@ -249,6 +252,21 @@ export default function Admin() {
                           onChange={(e) => upd(t.id, { fcr: Math.max(0, Math.min(100, +e.target.value)) })}
                           className="w-16 rounded-lg border border-black/10 sf-3 px-2 py-1 text-center font-bold outline-none focus:border-alfa/50 disabled:opacity-40"
                         />
+                      </td>
+                      <td className="px-2 text-center">
+                        <input type="checkbox" checked={g.superBonus} disabled={!g.submitted} onChange={(e) => upd(t.id, { superBonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-gold)] disabled:opacity-40" />
+                      </td>
+                      <td className="px-2 text-center">
+                        <input
+                          type="number" min={0} max={100}
+                          value={g.vok}
+                          disabled={!g.submitted}
+                          onChange={(e) => upd(t.id, { vok: Math.max(0, Math.min(100, +e.target.value)) })}
+                          className="w-16 rounded-lg border border-black/10 sf-3 px-2 py-1 text-center font-bold outline-none focus:border-alfa/50 disabled:opacity-40"
+                        />
+                      </td>
+                      <td className="px-2 text-center">
+                        <input type="checkbox" checked={g.superBonusVok} disabled={!g.submitted} onChange={(e) => upd(t.id, { superBonusVok: e.target.checked })} className="h-5 w-5 accent-[var(--color-gold)] disabled:opacity-40" />
                       </td>
                       <td className="px-2">
                         <input
@@ -414,7 +432,7 @@ function GradeCard({
   onChange: (patch: Partial<Grade>) => void
   onChat: () => void
 }) {
-  const sum = (g.submitted ? g.cases : 0) + (g.bonus ? 1 : 0) + (g.superBonus ? 3 : 0)
+  const sum = (g.submitted ? g.cases : 0) + (g.bonus ? 1 : 0) + (g.superBonus ? 3 : 0) + (g.superBonusVok ? 3 : 0)
   const fieldCls =
     'w-full rounded-lg border border-black/10 sf-3 px-2 py-1.5 text-center font-bold outline-none focus:border-alfa/50 disabled:opacity-40'
   return (
@@ -474,16 +492,30 @@ function GradeCard({
             className={fieldCls}
           />
         </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">ВОК %</span>
+          <input
+            type="number" min={0} max={100}
+            value={g.vok}
+            disabled={!g.submitted}
+            onChange={(e) => onChange({ vok: Math.max(0, Math.min(100, +e.target.value)) })}
+            className={fieldCls}
+          />
+        </label>
       </div>
 
-      <div className="mt-2 grid grid-cols-2 gap-2">
+      <div className="mt-2 grid grid-cols-3 gap-2">
         <label className="flex items-center justify-between gap-2 rounded-lg sf-1 px-3 py-2 text-sm font-semibold">
           Бонус +1
           <input type="checkbox" checked={g.bonus} disabled={!g.submitted} onChange={(e) => onChange({ bonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-alfa)] disabled:opacity-40" />
         </label>
         <label className="flex items-center justify-between gap-2 rounded-lg sf-1 px-3 py-2 text-sm font-semibold">
-          Супер +3
+          <span className="leading-tight">Супер&nbsp;+3<br/><span className="text-[10px] text-ink-soft">FCR</span></span>
           <input type="checkbox" checked={g.superBonus} disabled={!g.submitted} onChange={(e) => onChange({ superBonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-gold)] disabled:opacity-40" />
+        </label>
+        <label className="flex items-center justify-between gap-2 rounded-lg sf-1 px-3 py-2 text-sm font-semibold">
+          <span className="leading-tight">Супер&nbsp;+3<br/><span className="text-[10px] text-ink-soft">ВОК</span></span>
+          <input type="checkbox" checked={g.superBonusVok} disabled={!g.submitted} onChange={(e) => onChange({ superBonusVok: e.target.checked })} className="h-5 w-5 accent-[var(--color-gold)] disabled:opacity-40" />
         </label>
       </div>
 

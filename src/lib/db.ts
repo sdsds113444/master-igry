@@ -19,7 +19,7 @@ export interface TeamInfo {
   id: string; code: string; name: string; site: string; mentor: string; hue: number; coins: number
 }
 export interface AdminTeamRow { id: string; code: string; name: string; site: string; hue: number }
-export interface GradeRow { cases: number; bonus: number; superBonus: number; fcr: number; feedback: string }
+export interface GradeRow { cases: number; bonus: number; superBonus: number; fcr: number; vok: number; superBonusVok: number; feedback: string }
 
 // Демо-код админки ТОЛЬКО для офлайн-режима (моки, без реальных данных).
 // Боевой админ-код хранится в БД и НИКОГДА не попадает в репозиторий/бандл.
@@ -278,6 +278,8 @@ export async function getScores(teamId: string): Promise<Record<string, TeamScor
       bonus: r.bonus as number,
       superBonus: r.super_bonus as number,
       fcr: r.fcr as number,
+      vok: (r.vok as number) ?? 0,
+      superBonusVok: (r.super_bonus_vok as number) ?? 0,
       feedback: (r.feedback as string) ?? undefined,
     }
   }
@@ -306,14 +308,15 @@ export async function submitAnswer(input: SubmitInput): Promise<void> {
   throwOn(error)
 }
 
-export interface GradeInput { teamId: string; gameId: string; cases: number; bonus: number; superBonus: number; fcr: number; feedback: string }
+export interface GradeInput { teamId: string; gameId: string; cases: number; bonus: number; superBonus: number; fcr: number; vok: number; superBonusVok: number; feedback: string }
 export async function gradeSubmission(input: GradeInput): Promise<void> {
   if (!isSupabaseConfigured) return
   const { error } = await requireClient().from('scores').upsert(
     {
       team_id: input.teamId, game_id: input.gameId,
       cases: input.cases, bonus: input.bonus, super_bonus: input.superBonus,
-      fcr: input.fcr, feedback: input.feedback,
+      fcr: input.fcr, vok: input.vok, super_bonus_vok: input.superBonusVok,
+      feedback: input.feedback,
     },
     { onConflict: 'team_id,game_id' },
   )
@@ -326,7 +329,8 @@ export async function gradeMany(inputs: GradeInput[]): Promise<void> {
   const rows = inputs.map((i) => ({
     team_id: i.teamId, game_id: i.gameId,
     cases: i.cases, bonus: i.bonus, super_bonus: i.superBonus,
-    fcr: i.fcr, feedback: i.feedback,
+    fcr: i.fcr, vok: i.vok, super_bonus_vok: i.superBonusVok,
+    feedback: i.feedback,
   }))
   const { error } = await requireClient().from('scores').upsert(rows, { onConflict: 'team_id,game_id' })
   throwOn(error)
@@ -363,7 +367,7 @@ export async function getScoresForGame(gameId: string): Promise<Record<string, G
     const out: Record<string, GradeRow> = {}
     for (const t of TEAMS) {
       const s = t.perGame[gameId]
-      if (s) out[t.id] = { cases: s.cases, bonus: s.bonus, superBonus: s.superBonus, fcr: s.fcr, feedback: s.feedback ?? '' }
+      if (s) out[t.id] = { cases: s.cases, bonus: s.bonus, superBonus: s.superBonus, fcr: s.fcr, vok: s.vok ?? 0, superBonusVok: s.superBonusVok ?? 0, feedback: s.feedback ?? '' }
     }
     return out
   }
@@ -373,7 +377,8 @@ export async function getScoresForGame(gameId: string): Promise<Record<string, G
   for (const r of data ?? []) {
     out[r.team_id as string] = {
       cases: r.cases as number, bonus: r.bonus as number, superBonus: r.super_bonus as number,
-      fcr: r.fcr as number, feedback: (r.feedback as string) ?? '',
+      fcr: r.fcr as number, vok: (r.vok as number) ?? 0, superBonusVok: (r.super_bonus_vok as number) ?? 0,
+      feedback: (r.feedback as string) ?? '',
     }
   }
   return out

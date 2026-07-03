@@ -69,14 +69,16 @@ create table if not exists public.cases (
 
 -- Баллы команды по игре + ОС тренера. Пишет только админ/тренер (см. RLS).
 create table if not exists public.scores (
-  team_id     uuid not null references public.teams(id) on delete cascade,
-  game_id     text not null references public.games(id) on delete cascade,
-  cases       int  default 0 check (cases between 0 and 30),
-  bonus       int  default 0 check (bonus in (0,1)),
-  super_bonus int  default 0 check (super_bonus in (0,3)),
-  fcr         int  default 0 check (fcr between 0 and 100),
-  feedback    text,
-  updated_at  timestamptz default now(),
+  team_id         uuid not null references public.teams(id) on delete cascade,
+  game_id         text not null references public.games(id) on delete cascade,
+  cases           int  default 0 check (cases between 0 and 30),
+  bonus           int  default 0 check (bonus in (0,1)),
+  super_bonus     int  default 0 check (super_bonus in (0,3)),      -- +3 за лучший FCR недели
+  fcr             int  default 0 check (fcr between 0 and 100),
+  vok             int  default 0 check (vok between 0 and 100),     -- % ВОК
+  super_bonus_vok int  default 0 check (super_bonus_vok in (0,3)),  -- +3 за лучший ВОК недели
+  feedback        text,
+  updated_at      timestamptz default now(),
   primary key (team_id, game_id)
 );
 
@@ -182,7 +184,7 @@ create or replace function public.get_rating()
 returns table (id uuid, name text, site text, hue int, total bigint, coins int)
 language sql stable security definer set search_path = public as $fn$
   select t.id, t.name, t.site, t.hue,
-         coalesce(sum(s.cases + s.bonus + s.super_bonus), 0)::bigint as total,
+         coalesce(sum(s.cases + s.bonus + s.super_bonus + s.super_bonus_vok), 0)::bigint as total,
          t.coins
   from public.teams t
   left join public.scores s on s.team_id = t.id

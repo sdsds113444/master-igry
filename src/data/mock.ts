@@ -20,6 +20,8 @@ export interface TeamScore {
   bonus: number // +1 за нестандарт
   superBonus: number // +3 за лучший FCR недели
   fcr: number // % FCR
+  vok?: number // % ВОК
+  superBonusVok?: number // +3 за лучший ВОК недели
   feedback?: string // текст обратной связи тренера
 }
 
@@ -125,24 +127,26 @@ export const TEAMS: Team[] = NAMES.map((name, i) => {
   const strength = 0.35 + seeded(i, 1) * 0.6 // «сила» команды
   for (const g of GAMES) {
     if (g.status === 'locked') {
-      perGame[g.id] = { cases: 0, bonus: 0, superBonus: 0, fcr: 0 }
+      perGame[g.id] = { cases: 0, bonus: 0, superBonus: 0, fcr: 0, vok: 0, superBonusVok: 0 }
       continue
     }
     const played = g.status === 'done' || (g.status === 'current' && seeded(i, g.num) > 0.5)
     if (!played) {
-      perGame[g.id] = { cases: 0, bonus: 0, superBonus: 0, fcr: 0 }
+      perGame[g.id] = { cases: 0, bonus: 0, superBonus: 0, fcr: 0, vok: 0, superBonusVok: 0 }
       continue
     }
     const cases = Math.round((18 + seeded(i, g.num + 2) * 12) * strength) // до ~30
     const bonus = seeded(i, g.num + 5) > 0.7 ? 1 : 0
     const superBonus = seeded(i, g.num + 9) > 0.86 ? 3 : 0
     const fcr = Math.round(70 + seeded(i, g.num + 11) * 26)
+    const vok = Math.round(70 + seeded(i, g.num + 19) * 26)
+    const superBonusVok = seeded(i, g.num + 23) > 0.86 ? 3 : 0
     const feedback =
       seeded(i, g.num + 13) > 0.45
         ? FEEDBACK_POOL[Math.floor(seeded(i, g.num + 17) * FEEDBACK_POOL.length)]
         : undefined
-    perGame[g.id] = { cases, bonus, superBonus, fcr, feedback }
-    total += cases + bonus + superBonus
+    perGame[g.id] = { cases, bonus, superBonus, fcr, vok, superBonusVok, feedback }
+    total += cases + bonus + superBonus + superBonusVok
   }
   return {
     id: `t${i + 1}`,
@@ -189,7 +193,7 @@ export const RULES = [
   { icon: '🎯', title: 'Цель', text: 'Прокачать решение вопроса на звонке/в чате — без перезвона и переводов (FCR).' },
   { icon: '🗓️', title: 'Ритм недели', text: 'Понедельник — мультик + кейсы в кабинете. До пятницы 15:00 капитан сдаёт ответ команды.' },
   { icon: '⭐', title: 'Оценка кейсов', text: '0 — не сдали · 1 — более 3 ошибок · 2 — менее 3 ошибок · 3 — без ошибок (по каждому кейсу).' },
-  { icon: '➕', title: 'Бонусы', text: 'Бонус +1 за нестандартное решение. Супер-бонус +3 команде с лучшим FCR недели.' },
+  { icon: '➕', title: 'Бонусы', text: 'Бонус +1 за нестандартное решение. Супер-бонусы +3: команде с лучшим FCR недели и команде с лучшим ВОК недели.' },
   { icon: '📝', title: 'Проверка', text: 'Тренер (1 на 1–2 команды) даёт обратную связь и ставит балл. Рейтинг обновляется в пятницу.' },
   { icon: '🏆', title: 'Победитель', text: 'Команда с наибольшей суммой баллов за сезон. Итоги — в конце сезона.' },
 ]
