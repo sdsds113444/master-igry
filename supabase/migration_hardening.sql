@@ -41,8 +41,9 @@ begin
     raise exception 'too_many_attempts' using errcode = 'P0001';
   end if;
 
-  -- админ-код?
-  select * into v_admin from public.admin_codes where code = p_code and is_active;
+  -- админ-код? (регистронезависимо — фронт форсит toUpperCase, а коды генерируются lower-hex,
+  -- см. migration_case_insensitive_login.sql)
+  select * into v_admin from public.admin_codes where upper(code) = upper(p_code) and is_active;
   if found then
     insert into public.redeem_attempts (user_id, success) values (v_uid, true);
     insert into public.team_sessions (user_id, team_id, role)
@@ -52,7 +53,7 @@ begin
   end if;
 
   -- код команды?
-  select * into v_team from public.teams where code = p_code and is_active;
+  select * into v_team from public.teams where upper(code) = upper(p_code) and is_active;
   if not found then
     insert into public.redeem_attempts (user_id, success) values (v_uid, false);
     raise exception 'invalid_code' using errcode = 'P0001';
