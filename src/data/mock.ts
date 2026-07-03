@@ -2,6 +2,8 @@
    Данные ненастоящие — для демонстрации визуала и логики.
    Позже заменим на Supabase (реальные команды/баллы/задания). */
 
+import { teamTotal } from '../lib/scoring'
+
 export type GameStatus = 'done' | 'current' | 'locked'
 
 export interface Game {
@@ -13,6 +15,9 @@ export interface Game {
   emoji: string
   accent: string
   status: GameStatus
+  /** Ссылки на ассеты из БД (когда игра приходит из Supabase). В демо — не заданы. */
+  video_url?: string | null
+  file_url?: string | null
 }
 
 export interface TeamScore {
@@ -146,7 +151,7 @@ export const TEAMS: Team[] = NAMES.map((name, i) => {
         ? FEEDBACK_POOL[Math.floor(seeded(i, g.num + 17) * FEEDBACK_POOL.length)]
         : undefined
     perGame[g.id] = { cases, bonus, superBonus, fcr, vok, superBonusVok, feedback }
-    total += cases + bonus + superBonus + superBonusVok
+    total += teamTotal({ cases, bonus, superBonus, superBonusVok })
   }
   return {
     id: `t${i + 1}`,

@@ -1,9 +1,9 @@
-import { lazy, Suspense, type ReactElement } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { lazy, Suspense, useEffect, type ReactElement } from 'react'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Loader from './components/Loader'
-import { getSession } from './lib/db'
+import { getSession, reconcileSession } from './lib/db'
 
 // Тяжёлые страницы грузятся по требованию — не тянем их в стартовый бандл.
 const Board = lazy(() => import('./pages/Board'))
@@ -21,6 +21,16 @@ function RequireAdmin({ children }: { children: ReactElement }) {
 }
 
 export default function App() {
+  const navigate = useNavigate()
+
+  // Если анонимная auth-сессия истекла/пропала, а локальная «висит» — разлогиниваем,
+  // чтобы не застрять залогиненным с пустыми данными (RLS вернёт пусто).
+  useEffect(() => {
+    reconcileSession().then((cleared) => {
+      if (cleared) navigate('/', { replace: true })
+    })
+  }, [navigate])
+
   return (
     <Suspense fallback={<Loader minH="100vh" />}>
       <Routes>

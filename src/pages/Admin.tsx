@@ -1,13 +1,22 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Megaphone, RefreshCw, Check, Trophy, Loader2, MessageCircle, Bug, HelpCircle, Lightbulb, Eye, CheckCheck } from 'lucide-react'
+import { Megaphone, RefreshCw, Check, Trophy, Loader2, MessageCircle, Bug, HelpCircle, Lightbulb, Eye, CheckCheck, FileText, Download } from 'lucide-react'
 import { type Game } from '../data/mock'
 import {
   listAllTeamsAdmin, getScoresForGame, gradeMany, getGames, publishGame, pickCurrentGame,
+  getAnswersForGame, getAnswerFileUrl,
   listFeedback, setFeedbackStatus, type AdminTeamRow, type FeedbackRow,
 } from '../lib/db'
 import MentorChatModal from '../components/MentorChatModal'
+import Dialog from '../components/Dialog'
 import { teamAvatar } from '../lib/ui'
+import { gradeTotal, BONUS_POINTS, SUPER_BONUS_POINTS, SUPER_BONUS_VOK_POINTS } from '../lib/scoring'
+
+/** Целое число из поля ввода: защита от NaN и дробей, зажим в [0, max]. */
+function clampNum(raw: string, max: number): number {
+  const n = Math.floor(Number(raw))
+  return Number.isFinite(n) ? Math.max(0, Math.min(max, n)) : 0
+}
 
 interface Grade {
   submitted: boolean
@@ -33,6 +42,9 @@ export default function Admin() {
   const [teams, setTeams] = useState<AdminTeamRow[]>([])
   const [grades, setGrades] = useState<Record<string, Grade>>({})
   const [chatTeam, setChatTeam] = useState<AdminTeamRow | null>(null)
+  // Ответы команд по выбранной игре (текст + путь к файлу) — источник «сдал/не сдал» и просмотра.
+  const [answers, setAnswers] = useState<Record<string, { answer: string; filePath: string | null }>>({})
+  const [viewTeam, setViewTeam] = useState<AdminTeamRow | null>(null)
 
   // список игр + игра по умолчанию (текущая недели)
   useEffect(() => {
@@ -47,17 +59,24 @@ export default function Admin() {
     let cancelled = false
     async function load() {
       setLoading(true)
-      const [ts, scores] = await Promise.all([listAllTeamsAdmin(), getScoresForGame(gameId)])
+      const [ts, scores, ans] = await Promise.all([
+        listAllTeamsAdmin(), getScoresForGame(gameId), getAnswersForGame(gameId),
+      ])
       if (cancelled) return
       const init: Record<string, Grade> = {}
       for (const t of ts) {
         const s = scores[t.id]
+        // «Сдала» определяется наличием ответа в таблице answers, а не величиной баллов —
+        // иначе команда, сдавшая ответ и получившая 0, после перезагрузки выглядела бы «не сдала».
+        const submitted = !!ans[t.id]
+          || (s ? (s.cases > 0 || s.bonus > 0 || s.superBonus > 0 || s.superBonusVok > 0 || s.fcr > 0 || s.vok > 0 || !!s.feedback) : false)
         init[t.id] = s
-          ? { submitted: s.cases > 0 || s.bonus > 0 || s.superBonus > 0 || s.superBonusVok > 0 || s.fcr > 0 || s.vok > 0 || !!s.feedback, cases: s.cases, bonus: s.bonus > 0, superBonus: s.superBonus > 0, fcr: s.fcr, vok: s.vok, superBonusVok: s.superBonusVok > 0, feedback: s.feedback }
-          : { submitted: false, cases: 0, bonus: false, superBonus: false, fcr: 0, vok: 0, superBonusVok: false, feedback: '' }
+          ? { submitted, cases: s.cases, bonus: s.bonus > 0, superBonus: s.superBonus > 0, fcr: s.fcr, vok: s.vok, superBonusVok: s.superBonusVok > 0, feedback: s.feedback }
+          : { submitted, cases: 0, bonus: false, superBonus: false, fcr: 0, vok: 0, superBonusVok: false, feedback: '' }
       }
       setTeams(ts)
       setGrades(init)
+      setAnswers(ans)
       setPublished(false)
       setSaved(false)
       setLoading(false)
@@ -81,15 +100,17 @@ export default function Admin() {
       await gradeMany(
         teams.map((t) => {
           const g = grades[t.id]
+          // Не сдала → строка полностью обнуляется (в т.ч. fcr/vok/feedback), чтобы
+          // не оставалось «висящих» процентов/комментария при снятой галочке «сдала».
           return {
             teamId: t.id, gameId,
             cases: g.submitted ? g.cases : 0,
-            bonus: g.submitted && g.bonus ? 1 : 0,
-            superBonus: g.submitted && g.superBonus ? 3 : 0,
-            fcr: g.fcr,
-            vok: g.vok,
-            superBonusVok: g.submitted && g.superBonusVok ? 3 : 0,
-            feedback: g.feedback,
+            bonus: g.submitted && g.bonus ? BONUS_POINTS : 0,
+            superBonus: g.submitted && g.superBonus ? SUPER_BONUS_POINTS : 0,
+            fcr: g.submitted ? g.fcr : 0,
+            vok: g.submitted ? g.vok : 0,
+            superBonusVok: g.submitted && g.superBonusVok ? SUPER_BONUS_VOK_POINTS : 0,
+            feedback: g.submitted ? g.feedback : '',
           }
         }),
       )
@@ -202,7 +223,8 @@ export default function Admin() {
               <tbody>
                 {teams.map((t) => {
                   const g = grades[t.id]
-                  const sum = (g.submitted ? g.cases : 0) + (g.bonus ? 1 : 0) + (g.superBonus ? 3 : 0) + (g.superBonusVok ? 3 : 0)
+                  const sum = gradeTotal(g)
+                  const hasAnswer = !!answers[t.id]
                   return (
                     <tr key={t.id} className="border-t border-black/5 sf-hoversoft">
                       <td className="px-5 py-2.5">
@@ -214,6 +236,15 @@ export default function Admin() {
                             <div className="truncate font-bold">{t.name}</div>
                             <div className="text-xs text-ink-soft">{t.code} · {t.site}</div>
                           </div>
+                          <button
+                            onClick={() => setViewTeam(t)}
+                            disabled={!hasAnswer}
+                            aria-label={`Ответ команды ${t.name}`}
+                            title={hasAnswer ? 'Посмотреть ответ команды' : 'Команда ещё не сдала ответ'}
+                            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa disabled:opacity-30"
+                          >
+                            <FileText size={16} />
+                          </button>
                           <button
                             onClick={() => setChatTeam(t)}
                             aria-label={`Чат с командой ${t.name}`}
@@ -237,7 +268,7 @@ export default function Admin() {
                           type="number" min={0} max={30}
                           value={g.cases}
                           disabled={!g.submitted}
-                          onChange={(e) => upd(t.id, { cases: Math.max(0, Math.min(30, +e.target.value)) })}
+                          onChange={(e) => upd(t.id, { cases: clampNum(e.target.value, 30) })}
                           className="w-16 rounded-lg border border-black/10 sf-3 px-2 py-1 text-center font-bold outline-none focus:border-alfa/50 disabled:opacity-40"
                         />
                       </td>
@@ -249,7 +280,7 @@ export default function Admin() {
                           type="number" min={0} max={100}
                           value={g.fcr}
                           disabled={!g.submitted}
-                          onChange={(e) => upd(t.id, { fcr: Math.max(0, Math.min(100, +e.target.value)) })}
+                          onChange={(e) => upd(t.id, { fcr: clampNum(e.target.value, 100) })}
                           className="w-16 rounded-lg border border-black/10 sf-3 px-2 py-1 text-center font-bold outline-none focus:border-alfa/50 disabled:opacity-40"
                         />
                       </td>
@@ -261,7 +292,7 @@ export default function Admin() {
                           type="number" min={0} max={100}
                           value={g.vok}
                           disabled={!g.submitted}
-                          onChange={(e) => upd(t.id, { vok: Math.max(0, Math.min(100, +e.target.value)) })}
+                          onChange={(e) => upd(t.id, { vok: clampNum(e.target.value, 100) })}
                           className="w-16 rounded-lg border border-black/10 sf-3 px-2 py-1 text-center font-bold outline-none focus:border-alfa/50 disabled:opacity-40"
                         />
                       </td>
@@ -292,8 +323,10 @@ export default function Admin() {
                 key={t.id}
                 t={t}
                 g={grades[t.id]}
+                hasAnswer={!!answers[t.id]}
                 onChange={(patch) => upd(t.id, patch)}
                 onChat={() => setChatTeam(t)}
+                onView={() => setViewTeam(t)}
               />
             ))}
           </div>
@@ -307,7 +340,7 @@ export default function Admin() {
             ) : (
               <span className="flex items-center gap-2 text-ink-soft">
                 <Trophy size={16} style={{ color: 'var(--color-gold)' }} />
-                После сохранения рейтинг на доске обновится автоматически.
+                После сохранения доска обновится при переключении на её вкладку.
               </span>
             )}
           </div>
@@ -317,7 +350,7 @@ export default function Admin() {
             disabled={loading || saving}
             className="btn-alfa flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-bold disabled:opacity-60"
           >
-            {saving ? <Loader2 size={16} className="animate-spin" /> : saved ? <><Check size={16} /> Рейтинг обновлён</> : <><RefreshCw size={16} /> Сохранить и обновить рейтинг</>}
+            {saving ? <Loader2 size={16} className="animate-spin" /> : saved ? <><Check size={16} /> Баллы сохранены</> : <><RefreshCw size={16} /> Сохранить и обновить рейтинг</>}
           </motion.button>
         </div>
       </div>
@@ -330,8 +363,61 @@ export default function Admin() {
         asAdmin
       />
 
+      <AnswerView
+        team={viewTeam}
+        data={viewTeam ? answers[viewTeam.id] : undefined}
+        onClose={() => setViewTeam(null)}
+      />
+
       <FeedbackPanel />
     </div>
+  )
+}
+
+/** Просмотр ответа команды тренером: текст + скачивание файла (подписанная ссылка). */
+function AnswerView({ team, data, onClose }: {
+  team: AdminTeamRow | null
+  data?: { answer: string; filePath: string | null }
+  onClose: () => void
+}) {
+  const [downloading, setDownloading] = useState(false)
+  const fileName = data?.filePath ? (data.filePath.split('/').pop() ?? 'файл') : null
+
+  async function download() {
+    if (!data?.filePath || downloading) return
+    setDownloading(true)
+    try {
+      const url = await getAnswerFileUrl(data.filePath)
+      if (url) window.open(url, '_blank', 'noopener')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  return (
+    <Dialog
+      open={!!team}
+      onClose={onClose}
+      ariaLabel={`Ответ команды ${team?.name ?? ''}`}
+      panelClassName="w-full max-w-lg"
+      title={<><FileText size={17} className="shrink-0 text-alfa" /> <span className="truncate">Ответ — {team?.name}</span></>}
+    >
+      <div className="max-h-[70vh] space-y-3 overflow-auto p-4 pt-2">
+        {data?.answer
+          ? <p className="whitespace-pre-wrap rounded-2xl sf-1 p-4 text-sm">{data.answer}</p>
+          : <p className="rounded-2xl sf-1 p-4 text-center text-sm text-ink-soft">Текстового ответа нет.</p>}
+        {fileName && (
+          <button
+            onClick={download}
+            disabled={downloading}
+            className="btn-alfa flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold disabled:opacity-60"
+          >
+            {downloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+            <span className="truncate">Скачать файл: {fileName}</span>
+          </button>
+        )}
+      </div>
+    </Dialog>
   )
 }
 
@@ -425,14 +511,16 @@ function FeedbackPanel() {
 
 /** Карточка оценивания одной команды для мобильной раскладки (замена строки таблицы). */
 function GradeCard({
-  t, g, onChange, onChat,
+  t, g, hasAnswer, onChange, onChat, onView,
 }: {
   t: AdminTeamRow
   g: Grade
+  hasAnswer: boolean
   onChange: (patch: Partial<Grade>) => void
   onChat: () => void
+  onView: () => void
 }) {
-  const sum = (g.submitted ? g.cases : 0) + (g.bonus ? 1 : 0) + (g.superBonus ? 3 : 0) + (g.superBonusVok ? 3 : 0)
+  const sum = gradeTotal(g)
   const fieldCls =
     'w-full rounded-lg border border-black/10 sf-3 px-2 py-1.5 text-center font-bold outline-none focus:border-alfa/50 disabled:opacity-40'
   return (
@@ -452,6 +540,15 @@ function GradeCard({
           <div className="text-xs font-semibold text-ink-soft">Итог</div>
           <div className="text-lg font-bold leading-none">{sum}</div>
         </div>
+        <button
+          onClick={onView}
+          disabled={!hasAnswer}
+          aria-label={`Ответ команды ${t.name}`}
+          title={hasAnswer ? 'Посмотреть ответ команды' : 'Команда ещё не сдала ответ'}
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa disabled:opacity-30"
+        >
+          <FileText size={16} />
+        </button>
         <button
           onClick={onChat}
           aria-label={`Чат с командой ${t.name}`}
@@ -478,7 +575,7 @@ function GradeCard({
             type="number" min={0} max={30}
             value={g.cases}
             disabled={!g.submitted}
-            onChange={(e) => onChange({ cases: Math.max(0, Math.min(30, +e.target.value)) })}
+            onChange={(e) => onChange({ cases: clampNum(e.target.value, 30) })}
             className={fieldCls}
           />
         </label>
@@ -488,7 +585,7 @@ function GradeCard({
             type="number" min={0} max={100}
             value={g.fcr}
             disabled={!g.submitted}
-            onChange={(e) => onChange({ fcr: Math.max(0, Math.min(100, +e.target.value)) })}
+            onChange={(e) => onChange({ fcr: clampNum(e.target.value, 100) })}
             className={fieldCls}
           />
         </label>
@@ -498,7 +595,7 @@ function GradeCard({
             type="number" min={0} max={100}
             value={g.vok}
             disabled={!g.submitted}
-            onChange={(e) => onChange({ vok: Math.max(0, Math.min(100, +e.target.value)) })}
+            onChange={(e) => onChange({ vok: clampNum(e.target.value, 100) })}
             className={fieldCls}
           />
         </label>

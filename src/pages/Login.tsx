@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowRight, KeyRound, Loader2, Sparkles } from 'lucide-react'
 import Background from '../components/Background'
 import ThemeToggle from '../components/ThemeToggle'
-import { getSession, signInByCode } from '../lib/db'
+import { getSession, signInByCode, TooManyAttemptsError } from '../lib/db'
 import { isSupabaseConfigured } from '../lib/supabase'
 
 export default function Login() {
@@ -22,13 +22,22 @@ export default function Login() {
     if (!code.trim() || loading) return
     setLoading(true)
     setError('')
-    const session = await signInByCode(code)
-    setLoading(false)
-    if (!session) {
-      setError('Код не найден. Проверьте и попробуйте ещё раз.')
-      return
+    try {
+      const session = await signInByCode(code)
+      if (!session) {
+        setError('Код не найден. Проверьте и попробуйте ещё раз.')
+        return
+      }
+      navigate(session.role === 'admin' ? '/admin' : '/board')
+    } catch (e) {
+      if (e instanceof TooManyAttemptsError) {
+        setError('Слишком много попыток. Подождите пару минут и попробуйте снова.')
+      } else {
+        setError('Не удалось войти. Проверьте соединение и попробуйте ещё раз.')
+      }
+    } finally {
+      setLoading(false)
     }
-    navigate(session.role === 'admin' ? '/admin' : '/board')
   }
 
   return (

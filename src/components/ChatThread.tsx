@@ -47,7 +47,8 @@ export default function ChatThread({
       } catch {
         if (!cancelled) setError('Не удалось загрузить сообщения.')
       }
-      const liveSub = subscribeMessages(teamId, (m) => setChat((c) => [...c, m]), channel)
+      // dedup по id — на случай повторной доставки (реконнект/двойная подписка в dev)
+      const liveSub = subscribeMessages(teamId, (m) => setChat((c) => (c.some((x) => x.id === m.id) ? c : [...c, m])), channel)
       if (cancelled) { liveSub.unsubscribe(); return }
       unsub = liveSub
     }
@@ -116,6 +117,7 @@ export default function ChatThread({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={msgPlaceholder}
+            maxLength={4000}
             className="flex-1 rounded-2xl border border-black/5 sf-2 px-4 py-2.5 text-sm outline-none focus:border-alfa/40"
           />
           <button type="submit" aria-label="Отправить сообщение" className="btn-alfa grid h-[42px] w-[42px] shrink-0 place-items-center rounded-2xl">

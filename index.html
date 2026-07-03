@@ -5,16 +5,8 @@
     <link rel="icon" type="image/svg+xml" href="/koya-favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#EF3124" />
-    <script>
-      // Ставим тему ДО рендера, чтобы не было вспышки светлого экрана.
-      (function () {
-        try {
-          var saved = localStorage.getItem('theme')
-          var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches
-          if (dark) document.documentElement.classList.add('dark')
-        } catch (e) {}
-      })()
-    </script>
+    <!-- Тема ставится до рендера отдельным файлом (не inline) — чтобы CSP запрещал inline-скрипты. -->
+    <script src="/theme.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

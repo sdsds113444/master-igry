@@ -14,6 +14,7 @@ import {
   type TeamInfo,
 } from '../lib/db'
 import { heroStars as heroStarsOf, DEADLINE, DIFF_BADGE, teamAvatar } from '../lib/ui'
+import { teamTotal } from '../lib/scoring'
 import Stars from '../components/Stars'
 import VideoModal from '../components/VideoModal'
 import MentorChatModal from '../components/MentorChatModal'
@@ -39,7 +40,8 @@ export default function TeamCabinet() {
   const [sent, setSent] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState('')
-  const [fileAttached, setFileAttached] = useState<string | null>(null)
+  const [fileAttached, setFileAttached] = useState<string | null>(null) // имя для показа
+  const [file, setFile] = useState<File | null>(null)                   // новый выбранный файл (грузим в Storage)
 
   const [roster, setRoster] = useState<string[]>([])
   const [newPlayer, setNewPlayer] = useState('')
@@ -77,6 +79,8 @@ export default function TeamCabinet() {
         setCases(c)
         setScores(s)
         if (sub) { setAnswer(sub.answer); setFileAttached(sub.fileName); setSent(true) }
+        // sub.filePath — путь к ранее загруженному файлу; новый файл (file) заменит его
+
       } catch {
         if (!cancelled) setLoadError(true)
       } finally {
@@ -123,8 +127,16 @@ export default function TeamCabinet() {
     setSendError('')
     setSending(true)
     try {
-      await submitAnswer({ teamId: me.id, gameId: current.id, answer, fileName: fileAttached })
+      // Реально загружаем файл (если выбран) в Storage и сохраняем ответ.
+      const res = await submitAnswer({ teamId: me.id, gameId: current.id, answer, file })
+      const fresh = await getSubmission(me.id, current.id) // подтверждаем, что реально сохранилось
+      if (fresh) { setAnswer(fresh.answer); setFileAttached(fresh.fileName) }
+      const hadFile = !!file
+      setFile(null)
       setSent(true) // помечаем «сдано» ТОЛЬКО после успешной записи в БД
+      if (hadFile && !res.fileUploaded) {
+        setSendError('Текст ответа сохранён, но файл пока не удалось прикрепить. Попробуйте прикрепить его чуть позже.')
+      }
     } catch {
       setSendError('Ответ не отправился. Проверьте соединение и попробуйте ещё раз.')
     } finally {
@@ -178,7 +190,10 @@ export default function TeamCabinet() {
   if (!current) return null
 
   const videoTitle = `Мультик КОЯ — ${current.title}`
-  const fileName = GAME_FILE[current.id]?.split('/').pop() ?? 'кейсы.xlsx'
+  // Ассеты из БД (video_url/file_url), с откатом на статичные карты и защитой от undefined.
+  const videoSrc = current.video_url || GAME_VIDEO[current.id] || ''
+  const casesHref = current.file_url || GAME_FILE[current.id] || ''
+  const fileName = casesHref ? (casesHref.split('/').pop() ?? 'кейсы.xlsx') : 'кейсы.xlsx'
 
   return (
     <div className="space-y-6">
@@ -186,7 +201,7 @@ export default function TeamCabinet() {
         open={videoOpen}
         onClose={() => setVideoOpen(false)}
         title={videoTitle}
-        src={GAME_VIDEO[current.id]}
+        src={videoSrc}
       />
       {/* Шапка команды */}
       <motion.div
@@ -256,7 +271,8 @@ export default function TeamCabinet() {
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <button
                 onClick={() => setVideoOpen(true)}
-                className="group relative flex min-h-[112px] items-end overflow-hidden rounded-2xl bg-gradient-to-br from-alfa-soft to-alfa p-4 text-left text-white"
+                disabled={!videoSrc}
+                className="group relative flex min-h-[112px] items-end overflow-hidden rounded-2xl bg-gradient-to-br from-alfa-soft to-alfa p-4 text-left text-white disabled:opacity-60"
               >
                 <span className="pointer-events-none absolute -right-4 -top-6 text-7xl opacity-25 transition-transform group-hover:scale-110">🎬</span>
                 <div className="relative">
@@ -267,19 +283,29 @@ export default function TeamCabinet() {
                   <div className="text-xs text-white/80">Посмотреть перед стартом</div>
                 </div>
               </button>
-              <a
-                href={GAME_FILE[current.id]}
-                download={fileName}
-                className="group flex min-h-[112px] flex-col justify-end rounded-2xl sf-2 p-4 text-left transition-colors sf-hover"
-              >
-                <span className="mb-1.5 inline-grid h-9 w-9 place-items-center rounded-full bg-alfa/10 text-alfa">
-                  <FileDown size={16} />
-                </span>
-                <div className="text-sm font-bold">Скачать кейсы</div>
-                <div className="truncate text-xs text-ink-soft">
-                  Все {cases.length} кейсов · Excel
+              {casesHref ? (
+                <a
+                  href={casesHref}
+                  download={fileName}
+                  className="group flex min-h-[112px] flex-col justify-end rounded-2xl sf-2 p-4 text-left transition-colors sf-hover"
+                >
+                  <span className="mb-1.5 inline-grid h-9 w-9 place-items-center rounded-full bg-alfa/10 text-alfa">
+                    <FileDown size={16} />
+                  </span>
+                  <div className="text-sm font-bold">Скачать кейсы</div>
+                  <div className="truncate text-xs text-ink-soft">
+                    Все {cases.length} кейсов · Excel
+                  </div>
+                </a>
+              ) : (
+                <div className="flex min-h-[112px] flex-col justify-end rounded-2xl sf-2 p-4 text-left opacity-60">
+                  <span className="mb-1.5 inline-grid h-9 w-9 place-items-center rounded-full bg-alfa/10 text-alfa">
+                    <FileDown size={16} />
+                  </span>
+                  <div className="text-sm font-bold">Файл кейсов готовится</div>
+                  <div className="truncate text-xs text-ink-soft">Скоро появится</div>
                 </div>
-              </a>
+              )}
             </div>
           </div>
 
@@ -315,18 +341,21 @@ export default function TeamCabinet() {
             <h3 className="font-display text-lg font-bold">Ответ команды</h3>
             <p className="text-sm text-ink-soft">Обсудите в чате и оформите общий ответ. Отправляет капитан.</p>
             {sent ? (
-              <div
-                className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl bg-success/10 p-4 text-success"
-                role="status"
-              >
-                <CheckCircle2 className="shrink-0" /> Ответ отправлен тренеру! Ждите обратную связь в пятницу.
-                <button
-                  onClick={() => setSent(false)}
-                  className="ml-auto flex items-center gap-1.5 rounded-xl sf-2 px-3 py-1.5 text-xs font-bold text-ink transition-colors sf-hover"
+              <>
+                <div
+                  className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl bg-success/10 p-4 text-success"
+                  role="status"
                 >
-                  <Pencil size={13} /> Изменить ответ
-                </button>
-              </div>
+                  <CheckCircle2 className="shrink-0" /> Ответ отправлен тренеру! Ждите обратную связь в пятницу.
+                  <button
+                    onClick={() => setSent(false)}
+                    className="ml-auto flex items-center gap-1.5 rounded-xl sf-2 px-3 py-1.5 text-xs font-bold text-ink transition-colors sf-hover"
+                  >
+                    <Pencil size={13} /> Изменить ответ
+                  </button>
+                </div>
+                {sendError && <p className="mt-2 text-sm font-semibold text-danger" role="alert">{sendError}</p>}
+              </>
             ) : (
               <>
                 <textarea
@@ -346,7 +375,11 @@ export default function TeamCabinet() {
                       type="file"
                       accept=".xlsx,.xls,.pdf,.doc,.docx"
                       className="hidden"
-                      onChange={(e) => setFileAttached(e.target.files?.[0]?.name ?? null)}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] ?? null
+                        setFile(f)
+                        if (f) setFileAttached(f.name)
+                      }}
                     />
                   </label>
                   <button
@@ -473,7 +506,7 @@ export default function TeamCabinet() {
                 const s = scores[g.id]
                 if (!s) return null
                 const superVok = s.superBonusVok ?? 0
-                const sum = s.cases + s.bonus + s.superBonus + superVok
+                const sum = teamTotal({ cases: s.cases, bonus: s.bonus, superBonus: s.superBonus, superBonusVok: superVok })
                 return (
                   <div key={g.id} className="rounded-2xl sf-1 p-3">
                     <div className="flex items-center gap-3">

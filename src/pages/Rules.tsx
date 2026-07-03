@@ -1,12 +1,8 @@
 import { motion } from 'framer-motion'
 import { BookOpen, Gift } from 'lucide-react'
 import { RULES, PRIZES, PRIZES_NOTE } from '../data/mock'
+import { fadeUp } from '../lib/ui'
 import Badge from '../components/Badge'
-
-const fadeUp = {
-  hidden: { opacity: 0, y: 16 },
-  show: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.05, duration: 0.4 } }),
-}
 
 export default function Rules() {
   return (

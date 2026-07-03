@@ -56,6 +56,23 @@ export default function Board() {
     return () => { cancelled = true }
   }, [])
 
+  // Тихо обновляем рейтинг/игры/ленту при возврате на вкладку — чтобы уже открытая
+  // доска подхватывала новые баллы после сохранения в админке (без ручной перезагрузки).
+  useEffect(() => {
+    function refresh() {
+      if (document.visibilityState !== 'visible') return
+      Promise.all([listTeamsRating(), getGames(), listFeed()])
+        .then(([r, gs, fd]) => { setRating(r); setGames(gs); setFeed(fd) })
+        .catch(() => { /* тихо: это фоновое обновление, не первичная загрузка */ })
+    }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [])
+
   const myRating = rating?.find((r) => r.id === myTeam?.id)
   const myRank = myRating?.rank ?? 1
   const heroStars = heroStarsOf(myRank) // 3..5
@@ -219,7 +236,10 @@ export default function Board() {
               animate="show"
               disabled={locked}
               aria-label={locked ? `${g.title} — откроется позже` : `Смотреть мультик — ${g.title}`}
-              onClick={locked ? undefined : () => setVideo({ title: 'Мультик — ' + g.title, src: GAME_VIDEO[g.id] })}
+              onClick={locked ? undefined : () => {
+                const src = g.video_url || GAME_VIDEO[g.id]
+                if (src) setVideo({ title: 'Мультик — ' + g.title, src })
+              }}
               className={`glass lift min-w-[210px] flex-1 snap-start overflow-hidden rounded-3xl text-left ${
                 locked ? 'cursor-default opacity-60' : 'cursor-pointer'
               }`}
@@ -289,8 +309,10 @@ export default function Board() {
           </h2>
           <div className="space-y-3">
             {feed.map((f, i) => {
-              const openVideo = () => setVideo({ title: f.title, src: GAME_VIDEO[f.gameId ?? currentGame.id] })
-              const interactive = f.kind === 'video'
+              const vg = games.find((x) => x.id === (f.gameId ?? currentGame.id))
+              const videoSrc = vg?.video_url || GAME_VIDEO[f.gameId ?? currentGame.id] || ''
+              const openVideo = () => { if (videoSrc) setVideo({ title: f.title, src: videoSrc }) }
+              const interactive = f.kind === 'video' && !!videoSrc
               return (
               <motion.article
                 key={f.id}

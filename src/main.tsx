@@ -5,7 +5,10 @@ import './index.css'
 import App from './App.tsx'
 import ErrorBoundary from './components/ErrorBoundary.tsx'
 
-createRoot(document.getElementById('root')!).render(
+const rootEl = document.getElementById('root')
+if (!rootEl) throw new Error('Не найден корневой элемент #root в index.html')
+
+createRoot(rootEl).render(
   <StrictMode>
     <ErrorBoundary>
       <BrowserRouter>

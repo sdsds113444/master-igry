@@ -42,7 +42,7 @@ begin
   end if;
 
   -- админ-код? (регистронезависимо — фронт форсит toUpperCase, а коды генерируются lower-hex,
-  -- см. migration_case_insensitive_login.sql)
+  -- см. migration_login_fixes.sql — актуальная версия redeem_code)
   select * into v_admin from public.admin_codes where upper(code) = upper(p_code) and is_active;
   if found then
     insert into public.redeem_attempts (user_id, success) values (v_uid, true);
