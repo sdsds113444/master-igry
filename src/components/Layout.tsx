@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Users, ShieldCheck, LogOut, BookOpen } from 'lucide-react'
+import { LayoutDashboard, Users, ShieldCheck, LogOut, BookOpen, MessageSquarePlus } from 'lucide-react'
 import Background from './Background'
 import ThemeToggle from './ThemeToggle'
+import FeedbackModal from './FeedbackModal'
 import { getSession, signOut } from '../lib/db'
 import { teamAvatar } from '../lib/ui'
 
@@ -11,6 +13,7 @@ const linkBase =
 export default function Layout() {
   const navigate = useNavigate()
   const session = getSession()
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
 
   async function handleSignOut() {
     await signOut()
@@ -113,6 +116,17 @@ export default function Layout() {
       <main id="main" className="mx-auto max-w-6xl px-4 pb-16 pt-6">
         <Outlet />
       </main>
+
+      {/* Плавающая кнопка обратной связи — доступна с любой страницы. */}
+      <button
+        onClick={() => setFeedbackOpen(true)}
+        aria-label="Оставить отзыв"
+        title="Оставить отзыв"
+        className="btn-alfa fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full px-4 py-3 text-sm font-bold shadow-lg"
+      >
+        <MessageSquarePlus size={18} /> <span className="hidden sm:inline">Отзыв</span>
+      </button>
+      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </div>
   )
 }

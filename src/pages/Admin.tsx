@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Megaphone, RefreshCw, Check, Trophy, Loader2, MessageCircle } from 'lucide-react'
+import { Megaphone, RefreshCw, Check, Trophy, Loader2, MessageCircle, Bug, HelpCircle, Lightbulb, Eye, CheckCheck } from 'lucide-react'
 import { type Game } from '../data/mock'
 import {
   listAllTeamsAdmin, getScoresForGame, gradeMany, getGames, publishGame, pickCurrentGame,
-  type AdminTeamRow,
+  listFeedback, setFeedbackStatus, type AdminTeamRow, type FeedbackRow,
 } from '../lib/db'
 import MentorChatModal from '../components/MentorChatModal'
 import { teamAvatar } from '../lib/ui'
@@ -311,6 +311,96 @@ export default function Admin() {
         teamName={chatTeam?.name ?? ''}
         asAdmin
       />
+
+      <FeedbackPanel />
+    </div>
+  )
+}
+
+const CAT_ICON = { bug: Bug, question: HelpCircle, idea: Lightbulb } as const
+const CAT_LABEL = { bug: 'Баг', question: 'Вопрос', idea: 'Идея' } as const
+
+/** Отзывы тестировщиков (форма «Оставить отзыв» на сайте) — читает/меняет статус только админ. */
+function FeedbackPanel() {
+  const [items, setItems] = useState<FeedbackRow[] | null>(null)
+  const [onlyNew, setOnlyNew] = useState(false)
+
+  async function reload() {
+    setItems(await listFeedback())
+  }
+  useEffect(() => { reload() }, [])
+
+  async function mark(id: string, status: FeedbackRow['status']) {
+    setItems((prev) => prev?.map((f) => (f.id === id ? { ...f, status } : f)) ?? prev) // оптимистично
+    try {
+      await setFeedbackStatus(id, status)
+    } catch {
+      reload() // откат при ошибке
+    }
+  }
+
+  const shown = items?.filter((f) => !onlyNew || f.status === 'new') ?? []
+  const newCount = items?.filter((f) => f.status === 'new').length ?? 0
+
+  return (
+    <div className="glass-strong overflow-hidden rounded-glass">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/5 px-5 py-4">
+        <h2 className="flex items-center gap-2 font-display text-lg font-bold">
+          <Bug size={18} className="text-alfa" /> Отзывы тестировщиков
+          {newCount > 0 && (
+            <span className="rounded-full bg-alfa px-2 py-0.5 text-xs font-bold text-white">{newCount} новых</span>
+          )}
+        </h2>
+        <label className="flex items-center gap-2 text-xs font-semibold text-ink-soft">
+          <input type="checkbox" checked={onlyNew} onChange={(e) => setOnlyNew(e.target.checked)} className="h-4 w-4 accent-[var(--color-alfa)]" />
+          Только новые
+        </label>
+      </div>
+
+      {items === null ? (
+        <div className="grid h-32 place-items-center text-ink-soft"><Loader2 className="animate-spin" /></div>
+      ) : shown.length === 0 ? (
+        <div className="p-8 text-center text-sm text-ink-soft">
+          {items.length === 0 ? 'Пока никто ничего не написал.' : 'Новых отзывов нет.'}
+        </div>
+      ) : (
+        <div className="max-h-[480px] space-y-3 overflow-auto p-4">
+          {shown.map((f) => {
+            const Icon = CAT_ICON[f.category]
+            return (
+              <div key={f.id} className={`rounded-2xl p-4 ${f.status === 'new' ? 'sf-2 ring-1 ring-alfa/30' : 'sf-1'}`}>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-ink-soft">
+                  <span className="flex items-center gap-1 rounded-full sf-3 px-2 py-1 text-ink">
+                    <Icon size={12} /> {CAT_LABEL[f.category]}
+                  </span>
+                  <span>{f.author} · {f.teamName}</span>
+                  <span className="ml-auto">{f.createdAt}</span>
+                </div>
+                <p className="mt-2 text-sm"><b>Что делал:</b> {f.did}</p>
+                {f.expected && <p className="mt-0.5 text-sm text-ink-soft"><b>Ожидал:</b> {f.expected}</p>}
+                {f.got && <p className="mt-0.5 text-sm text-ink-soft"><b>Получил:</b> {f.got}</p>}
+                {f.device && <p className="mt-0.5 text-xs text-ink-soft">Устройство: {f.device}</p>}
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={() => mark(f.id, 'seen')}
+                    disabled={f.status !== 'new'}
+                    className="flex items-center gap-1.5 rounded-xl sf-3 px-3 py-1.5 text-xs font-bold transition-colors sf-hover disabled:opacity-40"
+                  >
+                    <Eye size={13} /> Увидел
+                  </button>
+                  <button
+                    onClick={() => mark(f.id, 'fixed')}
+                    disabled={f.status === 'fixed'}
+                    className="flex items-center gap-1.5 rounded-xl bg-success/15 px-3 py-1.5 text-xs font-bold text-success transition-colors hover:bg-success/25 disabled:opacity-40"
+                  >
+                    <CheckCheck size={13} /> Исправлено
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

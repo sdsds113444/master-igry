@@ -150,9 +150,11 @@ begin
     raise exception 'not_authenticated';
   end if;
 
-  -- админ-код?
+  -- админ-код? (сравнение без учёта регистра: фронт форсит toUpperCase на вводе,
+  -- а высокоэнтропийные коды генерируются как lower-hex — иначе владелец кода
+  -- физически не смог бы войти, вводя его с клавиатуры)
   select * into v_admin from public.admin_codes
-    where code = p_code and is_active;
+    where upper(code) = upper(p_code) and is_active;
   if found then
     insert into public.team_sessions (user_id, team_id, role)
       values (auth.uid(), null, 'admin')
@@ -162,7 +164,7 @@ begin
 
   -- код команды?
   select * into v_team from public.teams
-    where code = p_code and is_active;
+    where upper(code) = upper(p_code) and is_active;
   if not found then
     raise exception 'invalid_code' using errcode = 'P0001';
   end if;

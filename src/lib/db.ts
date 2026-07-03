@@ -425,3 +425,67 @@ export async function publishGame(gameId: string): Promise<void> {
   const { error } = await requireClient().rpc('publish_game', { p_game_id: gameId })
   throwOn(error)
 }
+
+// =====================================================================
+// ОБРАТНАЯ СВЯЗЬ ТЕСТИРОВЩИКОВ (форма «Оставить отзыв»)
+// =====================================================================
+export type FeedbackCategory = 'bug' | 'question' | 'idea'
+export interface FeedbackInput {
+  category: FeedbackCategory
+  did: string
+  expected?: string
+  got?: string
+  device?: string
+}
+export interface FeedbackRow {
+  id: string; teamName: string; author: string; category: FeedbackCategory
+  did: string; expected: string; got: string; device: string
+  status: 'new' | 'seen' | 'fixed'; createdAt: string
+}
+
+/** Отправить отзыв/баг. Работает только на живой базе — в демо-режиме молча игнорируем. */
+export async function submitFeedback(input: FeedbackInput): Promise<void> {
+  if (!isSupabaseConfigured) return
+  const ses = getSession()
+  const author = ses?.role === 'admin' ? 'Админ' : (getDisplayName() ?? ses?.name ?? 'Тестировщик')
+  const { error } = await requireClient().from('bug_reports').insert({
+    team_id: ses?.teamId ?? null,
+    author,
+    category: input.category,
+    did: input.did,
+    expected: input.expected ?? null,
+    got: input.got ?? null,
+    device: input.device ?? null,
+  })
+  throwOn(error)
+}
+
+/** Список отзывов для админки, с именем команды (join). */
+export async function listFeedback(): Promise<FeedbackRow[]> {
+  if (!isSupabaseConfigured) return []
+  const sb = requireClient()
+  const { data, error } = await sb
+    .from('bug_reports')
+    .select('id, author, category, did, expected, got, device, status, created_at, teams(name)')
+    .order('created_at', { ascending: false })
+    .limit(200)
+  throwOn(error)
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    teamName: ((r.teams as { name?: string } | null)?.name) ?? '—',
+    author: r.author as string,
+    category: r.category as FeedbackCategory,
+    did: r.did as string,
+    expected: (r.expected as string) ?? '',
+    got: (r.got as string) ?? '',
+    device: (r.device as string) ?? '',
+    status: r.status as FeedbackRow['status'],
+    createdAt: new Date(r.created_at as string).toLocaleString('ru', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
+  }))
+}
+
+export async function setFeedbackStatus(id: string, status: FeedbackRow['status']): Promise<void> {
+  if (!isSupabaseConfigured) return
+  const { error } = await requireClient().from('bug_reports').update({ status }).eq('id', id)
+  throwOn(error)
+}
