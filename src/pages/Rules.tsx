@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { BookOpen, Gift } from 'lucide-react'
-import { RULES, PRIZES } from '../data/mock'
+import { RULES, PRIZES, PRIZES_NOTE } from '../data/mock'
 import Badge from '../components/Badge'
 
 const fadeUp = {
@@ -83,6 +83,7 @@ export default function Rules() {
             </motion.div>
           ))}
         </div>
+        <p className="mt-3 px-1 text-xs text-ink-soft">{PRIZES_NOTE}</p>
       </section>
     </div>
   )
