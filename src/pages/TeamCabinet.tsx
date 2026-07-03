@@ -393,7 +393,7 @@ export default function TeamCabinet() {
                   }}
                 />
               </div>
-              <div className="flex flex-col justify-center py-5 pr-5">
+              <div className="flex flex-1 flex-col items-center justify-center py-5 px-4 text-center">
                 <div className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
                   Рейтинг героя
                 </div>
