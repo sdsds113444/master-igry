@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Play, FileDown, Upload, Send, MessageCircle, Crown, CheckCircle2, Clock, Star,
-  UserPlus, X, MessageSquare, Loader2, Pencil, Coins,
+  UserPlus, X, MessageSquare, Loader2, Pencil, Coins, ChevronDown,
 } from 'lucide-react'
 import {
   GAME_VIDEO, GAME_FILE,
@@ -34,6 +34,7 @@ export default function TeamCabinet() {
   const [games, setGames] = useState<Game[]>([])
   const [current, setCurrent] = useState<Game | null>(null)
   const [cases, setCases] = useState<CaseItem[]>([])
+  const [openCases, setOpenCases] = useState<Set<string>>(new Set()) // раскрытые кейсы (аккордеон)
   const [scores, setScores] = useState<Record<string, TeamScore>>({})
 
   const [answer, setAnswer] = useState('')
@@ -234,12 +235,12 @@ export default function TeamCabinet() {
         </div>
         <div className="flex flex-wrap gap-2">
           <a
-            href="https://max.ru"
+            href="https://xlink.achat.best/join/chat/NGM0ODFlNWYtNDU3NS01ZGVlLThiYTctMTgxYTM0YzE5NDE3OjI1MjE3Yzk1LTY3YTYtNTcxYS1hMzM0LWViMDFiZDExY2M2ODo1ODZkMmYxYy04MjA2LTVmM2MtODA4ZC1hOTU2YWFhMjk5ZTg6OWMzMmUzMTctZWUxNi01ZDI1LTlmZGYtODkzNTUxMGM3NmEy"
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-2 rounded-2xl sf-2 px-4 py-2.5 text-sm font-bold text-ink transition-colors sf-hover"
           >
-            <MessageCircle size={16} /> Чат в МАКС
+            <MessageCircle size={16} /> Общий чат
           </a>
           <button
             onClick={() => setMentorChatOpen(true)}
@@ -309,31 +310,43 @@ export default function TeamCabinet() {
             </div>
           </div>
 
-          {/* Кейсы */}
+          {/* Кейсы — раскрывающийся список (по умолчанию свёрнуты, чтобы не листать всё) */}
           <div className="space-y-3">
-            {cases.map((c, i) => (
-              <motion.div
-                key={c.id}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.08 }}
-                className="glass lift rounded-3xl p-4"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl sf-2 text-sm font-extrabold">{i + 1}</span>
-                    <h3 className="text-base font-bold">{c.title}</h3>
-                  </div>
-                  <Badge
-                    className="shrink-0"
-                    style={{ background: DIFF_BADGE[c.difficulty].bg, color: DIFF_BADGE[c.difficulty].fg }}
+            {cases.map((c, i) => {
+              const open = openCases.has(c.id)
+              return (
+                <motion.div
+                  key={c.id}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.08 }}
+                  className="glass lift overflow-hidden rounded-3xl"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOpenCases((s) => {
+                      const n = new Set(s)
+                      if (n.has(c.id)) n.delete(c.id); else n.add(c.id)
+                      return n
+                    })}
+                    aria-expanded={open}
+                    className="flex w-full items-center justify-between gap-2 p-4 text-left"
                   >
-                    {c.difficulty}
-                  </Badge>
-                </div>
-                <p className="mt-2 text-sm text-ink-soft">{c.text}</p>
-              </motion.div>
-            ))}
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl sf-2 text-sm font-extrabold">{i + 1}</span>
+                      <h3 className="truncate text-base font-bold">{c.title}</h3>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Badge style={{ background: DIFF_BADGE[c.difficulty].bg, color: DIFF_BADGE[c.difficulty].fg }}>
+                        {c.difficulty}
+                      </Badge>
+                      <ChevronDown size={18} className={`text-ink-soft transition-transform ${open ? 'rotate-180' : ''}`} />
+                    </div>
+                  </button>
+                  {open && <p className="px-4 pb-4 text-sm text-ink-soft">{c.text}</p>}
+                </motion.div>
+              )
+            })}
           </div>
 
           {/* Сдать ответ */}

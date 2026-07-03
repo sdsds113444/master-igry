@@ -56,8 +56,8 @@ export default function Board() {
     return () => { cancelled = true }
   }, [])
 
-  // Тихо обновляем рейтинг/игры/ленту при возврате на вкладку — чтобы уже открытая
-  // доска подхватывала новые баллы после сохранения в админке (без ручной перезагрузки).
+  // Тихо обновляем рейтинг/игры/ленту: при возврате на вкладку и по таймеру раз в 4 минуты —
+  // чтобы уже открытая доска подхватывала новые баллы после сохранения в админке без перезагрузки.
   useEffect(() => {
     function refresh() {
       if (document.visibilityState !== 'visible') return
@@ -67,9 +67,11 @@ export default function Board() {
     }
     window.addEventListener('focus', refresh)
     document.addEventListener('visibilitychange', refresh)
+    const timer = window.setInterval(refresh, 4 * 60 * 1000)
     return () => {
       window.removeEventListener('focus', refresh)
       document.removeEventListener('visibilitychange', refresh)
+      window.clearInterval(timer)
     }
   }, [])
 
@@ -253,7 +255,8 @@ export default function Board() {
                     alt=""
                     loading="lazy"
                     decoding="async"
-                    className="absolute inset-0 h-full w-full object-cover"
+                    // Закрытые игры: сильно замыливаем и затемняем арт, чтобы не спойлерить кадры мультика
+                    className={`absolute inset-0 h-full w-full object-cover ${locked ? 'scale-125 blur-xl brightness-[0.35]' : ''}`}
                     style={{ objectPosition: GAME_IMAGE_POSITION[g.id] ?? 'center 32%' }}
                   />
                 ) : (
@@ -279,6 +282,8 @@ export default function Board() {
                     </div>
                   </div>
                 )}
+                {/* Тёмная вуаль поверх закрытой игры — арт совсем не читается */}
+                {locked && <div className="pointer-events-none absolute inset-0 bg-black/45" />}
                 <div className="absolute right-2 top-2">
                   <StatusBadge status={g.status} />
                 </div>
