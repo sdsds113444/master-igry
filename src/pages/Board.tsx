@@ -184,12 +184,11 @@ export default function Board() {
           {/* Сцена с маскотом + карточка «Рейтинг героя» */}
           <div className="relative min-h-[260px] overflow-hidden">
             {/* Пастельная подложка — просвечивает там, где фото угасает по маске,
-                вместо жёсткого прямоугольного среза картинки. */}
+                вместо жёсткого прямоугольного среза картинки на стыке с текстовой панелью. */}
             <div
               className="absolute inset-0"
               style={{
-                background:
-                  'radial-gradient(85% 90% at 65% 45%, var(--color-sky) 0%, var(--color-lilac) 55%, transparent 85%)',
+                background: 'linear-gradient(to right, var(--color-sky), var(--color-lilac) 70%)',
               }}
             />
             <img
@@ -198,8 +197,10 @@ export default function Board() {
               className="absolute inset-0 h-full w-full object-cover"
               style={{
                 objectPosition: '50% 58%',
-                maskImage: 'radial-gradient(115% 115% at 60% 48%, black 62%, transparent 100%)',
-                WebkitMaskImage: '-webkit-radial-gradient(115% 115% at 60% 48%, black 62%, transparent 100%)',
+                // Линейное угасание по всей высоте левого края (не радиальная виньетка —
+                // та тает только по углам и оставляет шов посередине высоты).
+                maskImage: 'linear-gradient(to right, transparent 0%, black 24%)',
+                WebkitMaskImage: '-webkit-linear-gradient(to right, transparent 0%, black 24%)',
               }}
             />
             {/* падающие коечки */}
