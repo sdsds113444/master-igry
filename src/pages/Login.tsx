@@ -9,6 +9,7 @@ import { isSupabaseConfigured } from '../lib/supabase'
 export default function Login() {
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
+  const [slowHint, setSlowHint] = useState(false) // «сервер просыпается» при долгой первой загрузке
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
@@ -22,6 +23,10 @@ export default function Login() {
     if (!code.trim() || loading) return
     setLoading(true)
     setError('')
+    setSlowHint(false)
+    // Бесплатный Supabase «засыпает» — первый вход может будить сервер несколько секунд.
+    // Показываем ободряющую подсказку, чтобы тестер не думал, что всё зависло.
+    const slowTimer = window.setTimeout(() => setSlowHint(true), 4000)
     try {
       const session = await signInByCode(code)
       if (!session) {
@@ -36,7 +41,9 @@ export default function Login() {
         setError('Не удалось войти. Проверьте соединение и попробуйте ещё раз.')
       }
     } finally {
+      window.clearTimeout(slowTimer)
       setLoading(false)
+      setSlowHint(false)
     }
   }
 
@@ -106,6 +113,12 @@ export default function Login() {
             </label>
 
             {error && <p className="text-sm font-semibold text-danger" role="alert">{error}</p>}
+
+            {loading && slowHint && (
+              <p className="text-sm font-semibold text-ink-soft" role="status">
+                Первый вход занимает несколько секунд — сервер просыпается. Подождите…
+              </p>
+            )}
 
             <button
               type="submit"
