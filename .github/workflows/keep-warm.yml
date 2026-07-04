@@ -1,0 +1,28 @@
+name: keep-warm
+
+# Периодически пингуем Supabase, чтобы бесплатный проект не «засыпал» — тогда первый
+# вход у тестеров (особенно с телефона на мобильном интернете) быстрый, и проект не
+# уходит в 7-дневную паузу простоя.
+# apikey — публичный publishable-ключ (он и так лежит в браузерном бандле), не секрет.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *' # каждые ~10 минут (GitHub может немного задерживать запуск)
+  workflow_dispatch: {} # можно запустить вручную из вкладки Actions
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Warm up Supabase
+        run: |
+          KEY="sb_publishable_LBT-reWSumrSLqqTk3COvQ_IcR4MM9_"
+          BASE="https://ozgpjiemwcgunhtlttob.supabase.co"
+          echo "Прогреваем Supabase..."
+          # get_rating выполняет реальный запрос к БД → прогревает PostgREST + Postgres
+          curl -s -o /dev/null -w "get_rating -> %{http_code} (%{time_total}s)\n" \
+            -X POST "$BASE/rest/v1/rpc/get_rating" \
+            -H "apikey: $KEY" -H "Content-Type: application/json" -d '{}'
+          # health GoTrue → прогревает слой авторизации (вход по коду идёт через него)
+          curl -s -o /dev/null -w "auth health -> %{http_code} (%{time_total}s)\n" \
+            -H "apikey: $KEY" "$BASE/auth/v1/health"
