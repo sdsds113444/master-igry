@@ -25,7 +25,7 @@ export default function ThemeToggle({ className = '' }: { className?: string }) 
       onClick={() => setDark((d) => !d)}
       aria-label={dark ? 'Включить светлую тему' : 'Включить тёмную тему'}
       title={dark ? 'Светлая тема' : 'Тёмная тема'}
-      className={`grid h-10 w-10 place-items-center rounded-full sf-1 text-ink-soft transition-colors sf-hover hover:text-alfa ${className}`}
+      className={`tap grid h-10 w-10 place-items-center rounded-full sf-1 text-ink-soft transition-colors sf-hover hover:text-alfa ${className}`}
     >
       {dark ? <Sun size={18} /> : <Moon size={18} />}
     </button>

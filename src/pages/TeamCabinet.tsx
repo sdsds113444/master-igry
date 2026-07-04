@@ -262,7 +262,7 @@ export default function TeamCabinet() {
         {/* ==== ЛЕВАЯ КОЛОНКА ==== */}
         <section className="space-y-4">
           <div className="glass rounded-glass p-5">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-alfa">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-alfa-ink">
               <Clock size={13} /> Дедлайн: {DEADLINE}
             </div>
             <h2 className="mt-1 font-display text-2xl font-extrabold">{current.title}</h2>
@@ -376,7 +376,7 @@ export default function TeamCabinet() {
                   onChange={(e) => setAnswer(e.target.value)}
                   rows={5}
                   placeholder="Впишите решение по кейсам или прикрепите заполненный файл…"
-                  className="mt-3 w-full resize-none rounded-2xl border border-black/5 sf-2 p-4 text-sm outline-none focus:border-alfa/40"
+                  className="field mt-3 w-full resize-none p-4 text-sm outline-none"
                 />
                 <div className="mt-3 flex flex-wrap items-center gap-3">
                   <label className="flex max-w-full cursor-pointer items-center gap-2 rounded-2xl sf-2 px-4 py-2.5 text-sm font-bold transition-colors sf-hover">
@@ -486,7 +486,7 @@ export default function TeamCabinet() {
                       onClick={() => removePlayer(p)}
                       aria-label={`Убрать игрока ${p}`}
                       title="Убрать игрока"
-                      className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa focus-visible:bg-alfa/10 focus-visible:text-alfa"
+                      className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa focus-visible:bg-alfa/10 focus-visible:text-alfa"
                     >
                       <X size={16} />
                     </button>
@@ -504,7 +504,7 @@ export default function TeamCabinet() {
                 value={newPlayer}
                 onChange={(e) => setNewPlayer(e.target.value)}
                 placeholder="Имя игрока…"
-                className="flex-1 rounded-xl border border-black/5 sf-2 px-3 py-2 text-sm outline-none focus:border-alfa/40"
+                className="field flex-1 px-3 py-2 text-sm outline-none"
               />
               <button type="submit" className="btn-alfa flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold">
                 <UserPlus size={15} /> Добавить

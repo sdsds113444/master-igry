@@ -50,7 +50,7 @@ export default function Dialog({
               <button
                 onClick={onClose}
                 aria-label="Закрыть"
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-full sf-1 text-ink-soft transition-colors sf-hover hover:text-alfa"
+                className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full sf-1 text-ink-soft transition-colors sf-hover hover:text-alfa"
               >
                 <X size={18} />
               </button>

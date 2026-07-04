@@ -8,7 +8,7 @@ import { getSession, signOut } from '../lib/db'
 import { teamAvatar } from '../lib/ui'
 
 const linkBase =
-  'flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors'
+  'tap flex items-center justify-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors'
 
 export default function Layout() {
   const navigate = useNavigate()
@@ -34,7 +34,7 @@ export default function Layout() {
             <img src="/koya-favicon.svg" alt="КОЯ" className="h-9 w-9 drop-shadow" />
             <div className="hidden leading-tight sm:block">
               <div className="text-base font-bold tracking-tight">
-                Герои на линии
+                Мастера игры
               </div>
               <div className="text-xs font-semibold text-ink-soft">Альфа · КЦ</div>
             </div>
@@ -105,7 +105,7 @@ export default function Layout() {
               onClick={handleSignOut}
               aria-label="Выйти"
               title="Выйти"
-              className="grid h-10 w-10 place-items-center rounded-full sf-1 text-ink-soft transition-colors sf-hover hover:text-alfa"
+              className="tap grid h-10 w-10 place-items-center rounded-full sf-1 text-ink-soft transition-colors sf-hover hover:text-alfa"
             >
               <LogOut size={18} />
             </button>

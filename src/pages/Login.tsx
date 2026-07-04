@@ -76,7 +76,7 @@ export default function Login() {
                 Сезон 1 · 7 игр · 9 недель
               </div>
               <p className="mt-1 text-xs text-white/80">
-                Командный чемпионат контакт-центра. Решай кейсы, набирай очки, стань героем линии.
+                Командный чемпионат контакт-центра. Решай кейсы, набирай очки, стань мастером игры.
               </p>
             </div>
           </div>
@@ -91,7 +91,7 @@ export default function Login() {
           </div>
           <img src="/koya-favicon.svg" alt="" className="mb-4 h-12 w-12" />
           <h1 className="font-display text-3xl font-extrabold leading-tight">
-            Герои <span className="text-gradient">на линии</span>
+            Мастера <span className="text-gradient">игры</span>
           </h1>
           <p className="mt-2 text-sm text-ink-soft">
             Вход для команды. Введите код команды — его выдаёт организатор.
@@ -102,7 +102,7 @@ export default function Login() {
               <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-soft">
                 Код команды
               </span>
-              <div className="flex items-center gap-2 rounded-2xl border border-black/5 sf-2 px-4 py-3 focus-within:border-alfa/40">
+              <div className="field flex items-center gap-2 px-4 py-3">
                 <KeyRound size={18} className="text-ink-soft" />
                 <input
                   value={code}

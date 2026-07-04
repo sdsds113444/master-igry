@@ -80,7 +80,7 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
                 rows={2}
                 required
                 placeholder="Например: зашёл в кабинет, нажал «Отправить тренеру»…"
-                className="w-full resize-none rounded-xl border border-black/5 sf-2 p-3 text-sm outline-none focus:border-alfa/40"
+                className="field w-full resize-none p-3 text-sm outline-none"
               />
             </label>
 
@@ -92,7 +92,7 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
                     value={expected}
                     onChange={(e) => setExpected(e.target.value)}
                     placeholder="Сообщение «Отправлено»"
-                    className="w-full rounded-xl border border-black/5 sf-2 px-3 py-2 text-sm outline-none focus:border-alfa/40"
+                    className="field w-full px-3 py-2 text-sm outline-none"
                   />
                 </label>
                 <label className="block">
@@ -101,7 +101,7 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
                     value={got}
                     onChange={(e) => setGot(e.target.value)}
                     placeholder="Ничего не произошло / ошибка"
-                    className="w-full rounded-xl border border-black/5 sf-2 px-3 py-2 text-sm outline-none focus:border-alfa/40"
+                    className="field w-full px-3 py-2 text-sm outline-none"
                   />
                 </label>
               </>

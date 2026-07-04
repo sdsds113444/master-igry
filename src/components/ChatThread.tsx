@@ -128,7 +128,7 @@ export default function ChatThread({
             value={myName}
             onChange={(e) => setMyName(e.target.value)}
             placeholder={namePlaceholder}
-            className="flex-1 rounded-2xl border border-black/5 sf-2 px-4 py-2.5 text-sm outline-none focus:border-alfa/40"
+            className="field flex-1 px-4 py-2.5 text-sm outline-none"
           />
           <button type="submit" className="btn-alfa rounded-2xl px-4 py-2.5 text-sm font-bold">Ок</button>
         </form>
@@ -139,7 +139,7 @@ export default function ChatThread({
             onChange={(e) => setInput(e.target.value)}
             placeholder={msgPlaceholder}
             maxLength={4000}
-            className="flex-1 rounded-2xl border border-black/5 sf-2 px-4 py-2.5 text-sm outline-none focus:border-alfa/40"
+            className="field flex-1 px-4 py-2.5 text-sm outline-none"
           />
           <button type="submit" aria-label="Отправить сообщение" className="btn-alfa grid h-[42px] w-[42px] shrink-0 place-items-center rounded-2xl">
             <Send size={16} />

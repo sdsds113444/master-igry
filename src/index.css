@@ -4,15 +4,34 @@
    ручной переключатель. Все dark:* утилиты тоже реагируют на этот класс. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ============ ШРИФТЫ (self-hosted woff2, latin+cyrillic, переменные) ============
+   Inter — основной текст/UI (нейтральный, максимально читаемый).
+   Rubik — дисплейные заголовки (геометрика с мягко скруглёнными углами — в тон
+   скруглениям карточек и округлости маскота КОЯ). Оба переменные: один файл = все
+   веса. font-display: swap — текст виден сразу. Файлы: public/fonts/. */
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter-var.woff2') format('woff2');
+  font-weight: 100 900; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Rubik';
+  src: url('/fonts/rubik-var.woff2') format('woff2');
+  font-weight: 300 900; font-style: normal; font-display: swap;
+}
+
 /* ============ ДИЗАЙН-СИСТЕМА «КОЯ» ============ */
 @theme {
-  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'Unbounded', 'Manrope', sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Rubik', 'Inter', ui-sans-serif, sans-serif;
 
   /* Альфа / КОЯ */
   --color-alfa: #ef3124;
   --color-alfa-dark: #c81e12;
   --color-alfa-soft: #ff6a5c;
+  /* Брендовый красный, безопасный как МЕЛКИЙ текст/иконка-лейбл: 5.75:1 на белом.
+     Обычный --color-alfa (#ef3124 ≈ 4.1:1) оставляем для крупных заголовков и плашек. */
+  --color-alfa-ink: #c81e12;
 
   /* Пастель — переливы фонов КОЯ */
   --color-peach: #ffe3d3;
@@ -25,12 +44,20 @@
   --color-ink-soft: #5b5566;
 
   --color-gold: #ffc244;
+  /* Металлы медалей рейтинга (2-е / 3-е место) — были «магическими» хексами в Board. */
+  --color-silver: #c9cdd6;
+  --color-bronze: #e29a5b;
+
+  /* Вторичный акцент КОЯ — в градиенте заголовков и в конфетти (был хардкод в двух местах). */
+  --color-magenta: #b6208f;
+  --color-violet: #6a4bd6;
 
   /* Семантика состояний (отдельно от бренда). Оба проходят WCAG AA как текст. */
   --color-danger: #c81e12; /* ошибки: 5.75:1 на белом */
   --color-success: #167a55; /* успех: 5.32:1 на белом; из тона mint КОЯ */
 
   --radius-glass: 28px;
+  --radius-field: 12px; /* единый радиус полей ввода — убирает разнобой lg/xl/2xl */
 }
 
 @layer base {
@@ -171,7 +198,7 @@
 
 /* Текстовый градиент для заголовков */
 .text-gradient {
-  background: linear-gradient(120deg, var(--color-alfa) 0%, #b6208f 55%, #6a4bd6 100%);
+  background: linear-gradient(120deg, var(--color-alfa) 0%, var(--color-magenta) 55%, var(--color-violet) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -278,6 +305,45 @@ summary:focus-visible,
 .sf-hoversoft:hover { background: rgba(255, 255, 255, 0.60); }
 
 /* ============================================================
+   ЕДИНОЕ ПОЛЕ ВВОДА
+   Заменяет повторявшуюся связку «rounded-* + border-black/5 + sf-2 +
+   focus:border-alfa/40» (~8 копий по формам). Радиус — из токена
+   --radius-field. Видимый фокус с клавиатуры остаётся за глобальным
+   правилом :focus-visible выше (оно не в @layer → сильнее).
+   ============================================================ */
+.field {
+  border-radius: var(--radius-field);
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  background: rgba(255, 255, 255, 0.70);
+  transition: border-color 0.15s ease;
+}
+.field:focus,
+.field:focus-within {
+  border-color: color-mix(in srgb, var(--color-alfa) 45%, transparent);
+}
+
+/* ============================================================
+   ТАЧ-УСТРОЙСТВА (pointer: coarse)
+   – .tap: минимальная область нажатия 44×44 (WCAG 2.5.8); на десктопе
+     (fine pointer) кнопки остаются компактными.
+   – облегчаем стекло и гасим анимацию фоновых пятен — плавнее скролл
+     на слабых мобильных GPU.
+   ============================================================ */
+@media (pointer: coarse) {
+  .tap { min-width: 44px; min-height: 44px; }
+  .glass {
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+  }
+  .glass-strong {
+    backdrop-filter: blur(14px) saturate(150%);
+    -webkit-backdrop-filter: blur(14px) saturate(150%);
+  }
+  .koya-bg::before,
+  .koya-bg::after { animation: none; }
+}
+
+/* ============================================================
    ТЁМНАЯ ТЕМА
    ============================================================ */
 .dark {
@@ -287,6 +353,7 @@ summary:focus-visible,
   --color-ink-soft: #a9a2b8;
   --color-success: #46c08d; /* светлее для тёмного фона */
   --color-danger: #ff7063;
+  --color-alfa-ink: #ff6a5c; /* на тёмном фоне читаемее мягкий тон бренда */
 }
 
 /* Токен-переливы фона под тёмную тему — приглушённые брендовые пятна на почти-чёрном. */
@@ -326,6 +393,10 @@ summary:focus-visible,
 .dark textarea,
 .dark select {
   border-color: rgba(255, 255, 255, 0.14);
+}
+.dark .field {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* Скролл-бар и скелетон под тёмную тему. */

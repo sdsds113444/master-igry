@@ -144,7 +144,7 @@ export default function Board() {
         <div className="grid md:grid-cols-[1.25fr_1fr]">
           {/* Текст */}
           <div className="relative z-10 p-7 sm:p-9">
-            <span className="inline-flex items-center gap-2 rounded-full bg-alfa/10 px-3 py-1 text-xs font-bold text-alfa">
+            <span className="inline-flex items-center gap-2 rounded-full bg-alfa/10 px-3 py-1 text-xs font-bold text-alfa-ink">
               <Flame size={13} /> Сезон 1 · Неделя {currentGame.week} из 9
             </span>
             <h1 className="mt-3 font-display text-3xl font-extrabold leading-[1.1] sm:text-4xl">
@@ -164,7 +164,7 @@ export default function Board() {
               <div className="h-2.5 overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
                 <motion.div
                   className="h-full rounded-full"
-                  style={{ background: 'linear-gradient(90deg,#ff6a5c,#ef3124)' }}
+                  style={{ background: 'linear-gradient(90deg, var(--color-alfa-soft), var(--color-alfa))' }}
                   initial={{ width: 0 }}
                   animate={{ width: `${(doneCount / games.length) * 100}%` }}
                   transition={{ duration: 1, delay: 0.3 }}
@@ -251,7 +251,7 @@ export default function Board() {
 
       {/* ==== ЛЕНТА ИГР СЕЗОНА ==== */}
       <section>
-        <h2 className="mb-3 flex items-center gap-2 px-1 font-display text-lg font-bold">
+        <h2 className="mb-3 flex items-center gap-2 px-1 font-display text-xl font-bold">
           <Clapperboard size={20} className="text-alfa" /> Игры сезона
         </h2>
         <div className="flex snap-x gap-3 overflow-x-auto pb-2 [scrollbar-width:thin]">
@@ -338,7 +338,7 @@ export default function Board() {
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         {/* Лента новостей / мультиков */}
         <section>
-          <h2 className="mb-3 flex items-center gap-2 px-1 font-display text-lg font-bold">
+          <h2 className="mb-3 flex items-center gap-2 px-1 font-display text-xl font-bold">
             <Newspaper size={20} className="text-alfa" /> Лента доски
           </h2>
           <div className="space-y-3">
@@ -382,7 +382,7 @@ export default function Board() {
                   <p className="mt-0.5 text-sm text-ink-soft">{f.text}</p>
                   <div className="mt-1.5 flex items-center gap-2 text-xs font-semibold text-ink-soft">
                     {f.date}
-                    {f.kind === 'video' && <span className="font-bold text-alfa">▶ Смотреть ролик</span>}
+                    {f.kind === 'video' && <span className="font-bold text-alfa-ink">▶ Смотреть ролик</span>}
                   </div>
                 </div>
               </motion.article>
@@ -393,7 +393,7 @@ export default function Board() {
 
         {/* Рейтинг команд */}
         <section id="rating">
-          <h2 className="mb-3 flex items-center gap-2 px-1 font-display text-lg font-bold">
+          <h2 className="mb-3 flex items-center gap-2 px-1 font-display text-xl font-bold">
             <Trophy size={20} className="text-alfa" /> Рейтинг команд
           </h2>
           <div className="glass-strong rounded-3xl p-3">
@@ -410,7 +410,7 @@ export default function Board() {
 
             <Link
               to="/team"
-              className="mt-2 flex items-center justify-center gap-1.5 rounded-2xl sf-1 py-2.5 text-sm font-bold text-alfa transition-colors sf-hover"
+              className="mt-2 flex items-center justify-center gap-1.5 rounded-2xl sf-1 py-2.5 text-sm font-bold text-alfa-ink transition-colors sf-hover"
             >
               Мой кабинет <ArrowRight size={15} />
             </Link>
@@ -425,7 +425,7 @@ function StatusBadge({ status }: { status: string }) {
   if (status === 'done')
     return <Badge className="bg-success/15 text-success"><Check size={12} /> Сыграна</Badge>
   if (status === 'current')
-    return <Badge className="bg-alfa/15 text-alfa"><Flame size={12} /> Идёт</Badge>
+    return <Badge className="bg-alfa/15 text-alfa-ink"><Flame size={12} /> Идёт</Badge>
   return (
     <Badge className="bg-black/10 text-ink-soft dark:bg-white/15">
       <Lock size={12} /> Скоро
@@ -437,7 +437,7 @@ function RatingRowView({
   rank, name, site, total, hue, me,
 }: { rank: number; name: string; site: string; total: number; hue: number; me?: boolean }) {
   const medal = rank <= 3
-  const medalColor = ['#ffc244', '#c9cdd6', '#e29a5b'][rank - 1]
+  const medalColor = ['var(--color-gold)', 'var(--color-silver)', 'var(--color-bronze)'][rank - 1]
   return (
     <div
       className={`flex items-center gap-3 rounded-2xl px-3 py-2.5 ${
@@ -455,7 +455,7 @@ function RatingRowView({
         {name.slice(0, 1)}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-bold">{name}{me && <span className="ml-1 text-alfa">· вы</span>}</div>
+        <div className="truncate text-sm font-bold">{name}{me && <span className="ml-1 text-alfa-ink">· вы</span>}</div>
         <div className="text-xs font-semibold text-ink-soft">{site}</div>
       </div>
       <div className="text-base font-bold"><CountUp value={total} /></div>

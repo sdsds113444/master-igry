@@ -15,11 +15,11 @@ export default function Rules() {
       >
         <div className="grid items-center md:grid-cols-[1.4fr_1fr]">
           <div className="p-7 sm:p-9">
-            <span className="inline-flex items-center gap-2 rounded-full bg-alfa/10 px-3 py-1 text-xs font-bold text-alfa">
+            <span className="inline-flex items-center gap-2 rounded-full bg-alfa/10 px-3 py-1 text-xs font-bold text-alfa-ink">
               <BookOpen size={14} /> Регламент конкурса
             </span>
             <h1 className="mt-3 font-display text-3xl font-extrabold leading-tight sm:text-4xl">
-              Правила <span className="text-gradient">«Героев на линии»</span>
+              Правила <span className="text-gradient">«Мастеров игры»</span>
             </h1>
             <p className="mt-2 max-w-md text-sm text-ink-soft">
               Всё, что нужно знать команде: формат, ритм недели, как считаются баллы и что можно выиграть.
@@ -33,7 +33,7 @@ export default function Rules() {
 
       {/* Правила */}
       <section>
-        <h2 className="mb-3 px-1 font-display text-lg font-bold">Как всё устроено</h2>
+        <h2 className="mb-3 px-1 font-display text-xl font-bold">Как всё устроено</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           {RULES.map((r, i) => (
             <motion.div
@@ -58,7 +58,7 @@ export default function Rules() {
 
       {/* Призы */}
       <section>
-        <h2 className="mb-3 flex items-center gap-2 px-1 font-display text-lg font-bold"><Gift size={20} className="text-alfa" /> Призы сезона</h2>
+        <h2 className="mb-3 flex items-center gap-2 px-1 font-display text-xl font-bold"><Gift size={20} className="text-alfa" /> Призы сезона</h2>
         <div className="grid gap-3 sm:grid-cols-3">
           {PRIZES.map((p, i) => (
             <motion.div

@@ -7,13 +7,11 @@
     <meta name="theme-color" content="#EF3124" />
     <!-- Тема ставится до рендера отдельным файлом (не inline) — чтобы CSP запрещал inline-скрипты. -->
     <script src="/theme.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@600;700;800&display=swap"
-      rel="stylesheet"
-    />
-    <title>Герои на линии · Альфа</title>
+    <!-- Шрифты (self-hosted, @font-face в src/index.css). Предзагружаем оба
+         переменных файла — они покрывают все веса текста (Inter) и заголовков (Rubik). -->
+    <link rel="preload" href="/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/rubik-var.woff2" as="font" type="font/woff2" crossorigin />
+    <title>Мастера игры · Альфа</title>
   </head>
   <body>
     <div id="root"></div>

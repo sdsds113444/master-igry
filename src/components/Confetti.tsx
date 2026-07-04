@@ -7,7 +7,14 @@ import { motion, useReducedMotion } from 'framer-motion'
  * Показывать через ключ/условие, чтобы сыграл единожды (напр. при входе в топ-3).
  * При prefers-reduced-motion не рендерит ничего.
  */
-const COLORS = ['#ef3124', '#ffc244', '#6a4bd6', '#b6208f', '#46c08d', '#ff6a5c']
+const COLORS = [
+  'var(--color-alfa)',
+  'var(--color-gold)',
+  'var(--color-violet)',
+  'var(--color-magenta)',
+  'var(--color-success)',
+  'var(--color-alfa-soft)',
+]
 
 export default function Confetti({ count = 36 }: { count?: number }) {
   const reduce = useReducedMotion()

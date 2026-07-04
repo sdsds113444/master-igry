@@ -192,7 +192,7 @@ export default function Admin() {
       {/* Таблица оценивания */}
       <div className="glass-strong overflow-hidden rounded-glass">
         <div className="flex items-center justify-between border-b border-black/5 px-5 py-4">
-          <h2 className="font-display text-lg font-bold">Оценивание команд</h2>
+          <h2 className="font-display text-xl font-bold">Оценивание команд</h2>
           <div className="text-xs font-semibold text-ink-soft">
             Шкала: 0 — не сдал · 1 — &gt;3 ошибок · 2 — &lt;3 ошибок · 3 — без ошибок (за каждый кейс)
           </div>
@@ -241,7 +241,7 @@ export default function Admin() {
                             disabled={!hasAnswer}
                             aria-label={`Ответ команды ${t.name}`}
                             title={hasAnswer ? 'Посмотреть ответ команды' : 'Команда ещё не сдала ответ'}
-                            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa disabled:opacity-30"
+                            className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa disabled:opacity-30"
                           >
                             <FileText size={16} />
                           </button>
@@ -249,7 +249,7 @@ export default function Admin() {
                             onClick={() => setChatTeam(t)}
                             aria-label={`Чат с командой ${t.name}`}
                             title="Чат с командой"
-                            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa"
+                            className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa"
                           >
                             <MessageCircle size={16} />
                           </button>
@@ -449,7 +449,7 @@ function FeedbackPanel() {
   return (
     <div className="glass-strong overflow-hidden rounded-glass">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/5 px-5 py-4">
-        <h2 className="flex items-center gap-2 font-display text-lg font-bold">
+        <h2 className="flex items-center gap-2 font-display text-xl font-bold">
           <Bug size={18} className="text-alfa" /> Отзывы тестировщиков
           {newCount > 0 && (
             <span className="rounded-full bg-alfa px-2 py-0.5 text-xs font-bold text-white">{newCount} новых</span>
@@ -545,14 +545,14 @@ function GradeCard({
           disabled={!hasAnswer}
           aria-label={`Ответ команды ${t.name}`}
           title={hasAnswer ? 'Посмотреть ответ команды' : 'Команда ещё не сдала ответ'}
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa disabled:opacity-30"
+          className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa disabled:opacity-30"
         >
           <FileText size={16} />
         </button>
         <button
           onClick={onChat}
           aria-label={`Чат с командой ${t.name}`}
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa"
+          className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa"
         >
           <MessageCircle size={16} />
         </button>
@@ -607,11 +607,11 @@ function GradeCard({
           <input type="checkbox" checked={g.bonus} disabled={!g.submitted} onChange={(e) => onChange({ bonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-alfa)] disabled:opacity-40" />
         </label>
         <label className="flex items-center justify-between gap-2 rounded-lg sf-1 px-3 py-2 text-sm font-semibold">
-          <span className="leading-tight">Супер&nbsp;+3<br/><span className="text-[10px] text-ink-soft">FCR</span></span>
+          <span className="leading-tight">Супер&nbsp;+3<br/><span className="text-[11px] text-ink-soft">FCR</span></span>
           <input type="checkbox" checked={g.superBonus} disabled={!g.submitted} onChange={(e) => onChange({ superBonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-gold)] disabled:opacity-40" />
         </label>
         <label className="flex items-center justify-between gap-2 rounded-lg sf-1 px-3 py-2 text-sm font-semibold">
-          <span className="leading-tight">Супер&nbsp;+3<br/><span className="text-[10px] text-ink-soft">ВОК</span></span>
+          <span className="leading-tight">Супер&nbsp;+3<br/><span className="text-[11px] text-ink-soft">ВОК</span></span>
           <input type="checkbox" checked={g.superBonusVok} disabled={!g.submitted} onChange={(e) => onChange({ superBonusVok: e.target.checked })} className="h-5 w-5 accent-[var(--color-gold)] disabled:opacity-40" />
         </label>
       </div>
