@@ -118,8 +118,19 @@ async function ensureAnon() {
 // =====================================================================
 // ВХОД ПО КОДУ
 // =====================================================================
+/** Нормализуем код входа устойчиво к мобильным клавиатурам: приводим к верхнему
+ *  регистру, разные виды тире/дефиса → обычный «-», и выкидываем всё, что не входит
+ *  в формат кода (пробелы, невидимые символы, «умные» кавычки от автозамены iOS).
+ *  Коды у нас только из [A-Z0-9-], поэтому такая жёсткая чистка безопасна. */
+export function normalizeCode(code: string): string {
+  return code
+    .toUpperCase()
+    .replace(/[‐-―−⁃﹣－]/g, '-') // en/em-dash, minus и т.п. → '-'
+    .replace(/[^A-Z0-9-]/g, '')
+}
+
 export async function signInByCode(code: string): Promise<Session | null> {
-  const norm = code.trim().toUpperCase()
+  const norm = normalizeCode(code)
 
   if (!isSupabaseConfigured) {
     if (norm === MOCK_ADMIN_CODE) {

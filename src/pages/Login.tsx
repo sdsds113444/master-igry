@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowRight, KeyRound, Loader2, Sparkles } from 'lucide-react'
 import Background from '../components/Background'
 import ThemeToggle from '../components/ThemeToggle'
-import { getSession, signInByCode, TooManyAttemptsError } from '../lib/db'
+import { getSession, signInByCode, normalizeCode, TooManyAttemptsError } from '../lib/db'
 import { isSupabaseConfigured } from '../lib/supabase'
 
 export default function Login() {
@@ -90,8 +90,16 @@ export default function Login() {
                 <KeyRound size={18} className="text-ink-soft" />
                 <input
                   value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  onChange={(e) => setCode(normalizeCode(e.target.value))}
                   placeholder="KOYA-04"
+                  // мобильные клавиатуры: без автозамены/автокапитализации/умной пунктуации,
+                  // чтобы код не искажался (частая причина «код не найден» на телефоне)
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  autoComplete="off"
+                  spellCheck={false}
+                  inputMode="text"
+                  enterKeyHint="go"
                   className="w-full bg-transparent text-lg font-bold tracking-wider outline-none placeholder:text-ink-soft/70"
                 />
               </div>
