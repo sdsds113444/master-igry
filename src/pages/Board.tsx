@@ -182,12 +182,25 @@ export default function Board() {
           </div>
 
           {/* Сцена с маскотом + карточка «Рейтинг героя» */}
-          <div className="relative min-h-[260px]">
+          <div className="relative min-h-[260px] overflow-hidden">
+            {/* Пастельная подложка — просвечивает там, где фото угасает по маске,
+                вместо жёсткого прямоугольного среза картинки. */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  'radial-gradient(85% 90% at 65% 45%, var(--color-sky) 0%, var(--color-lilac) 55%, transparent 85%)',
+              }}
+            />
             <img
               src="/koya/koya-hero-crop.webp"
               alt="Маскот КОЯ"
               className="absolute inset-0 h-full w-full object-cover"
-              style={{ objectPosition: '50% 58%' }}
+              style={{
+                objectPosition: '50% 58%',
+                maskImage: 'radial-gradient(115% 115% at 60% 48%, black 62%, transparent 100%)',
+                WebkitMaskImage: '-webkit-radial-gradient(115% 115% at 60% 48%, black 62%, transparent 100%)',
+              }}
             />
             {/* падающие коечки */}
             {['🪙', '⭐', '🐾', '🪙', '⭐', '🐾'].map((emoji, i) => (
