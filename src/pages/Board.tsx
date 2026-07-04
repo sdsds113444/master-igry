@@ -11,6 +11,9 @@ import { heroStars as heroStarsOf, fadeUp, teamAvatar } from '../lib/ui'
 import Stars from '../components/Stars'
 import VideoModal from '../components/VideoModal'
 import Badge from '../components/Badge'
+import Tilt from '../components/Tilt'
+import Confetti from '../components/Confetti'
+import CountUp from '../components/CountUp'
 
 // Тематические образы КОЯ по играм — кадры выдернуты прямо из мультиков этих игр
 // (video/МУЛЬТ 5/7/8.mp4 через ffmpeg). Нет образа → градиент+эмодзи.
@@ -78,6 +81,7 @@ export default function Board() {
   const myRating = rating?.find((r) => r.id === myTeam?.id)
   const myRank = myRating?.rank ?? 1
   const heroStars = heroStarsOf(myRank) // 3..5
+  const inPrizes = !!myRating && myRating.rank <= 3 // призовая тройка → залп конфетти
 
   if (error) {
     return (
@@ -131,6 +135,12 @@ export default function Board() {
         transition={{ duration: 0.6 }}
         className="glass-strong relative overflow-hidden rounded-glass"
       >
+        {/* Залп конфетти по всему баннеру — один раз, когда моя команда в призовой тройке */}
+        {inPrizes && (
+          <div className="pointer-events-none absolute inset-0 z-20">
+            <Confetti count={48} />
+          </div>
+        )}
         <div className="grid md:grid-cols-[1.25fr_1fr]">
           {/* Текст */}
           <div className="relative z-10 p-7 sm:p-9">
@@ -181,56 +191,61 @@ export default function Board() {
             </div>
           </div>
 
-          {/* Сцена с маскотом + карточка «Рейтинг героя» */}
-          <div className="relative min-h-[260px] overflow-hidden">
-            {/* Пастельная подложка — просвечивает там, где фото угасает по маске,
-                вместо жёсткого прямоугольного среза картинки на стыке с текстовой панелью. */}
-            <div
-              className="absolute inset-0"
-              style={{
-                background: 'linear-gradient(to right, var(--color-sky), var(--color-lilac) 70%)',
-              }}
-            />
-            <img
-              src="/koya/koya-hero-crop.webp"
-              alt="Маскот КОЯ"
-              className="absolute inset-0 h-full w-full object-cover"
-              style={{
-                objectPosition: '50% 58%',
-                // Линейное угасание по всей высоте левого края (не радиальная виньетка —
-                // та тает только по углам и оставляет шов посередине высоты).
-                maskImage: 'linear-gradient(to right, transparent 0%, black 24%)',
-                WebkitMaskImage: '-webkit-linear-gradient(to right, transparent 0%, black 24%)',
-              }}
-            />
-            {/* падающие коечки */}
-            {['🪙', '⭐', '🐾', '🪙', '⭐', '🐾'].map((emoji, i) => (
-              <span
-                key={`koya-drop-${i}`}
-                className="pointer-events-none absolute top-0 text-2xl"
+          {/* Сцена с маскотом + карточка «Рейтинг героя» — наклоняется 3D за курсором/гироскопом */}
+          <Tilt className="relative min-h-[260px]">
+            <div className="relative h-full min-h-[260px] overflow-hidden">
+              {/* Пастельная подложка — просвечивает там, где фото угасает по маске,
+                  вместо жёсткого прямоугольного среза картинки на стыке с текстовой панелью. */}
+              <div
+                className="absolute inset-0"
                 style={{
-                  left: `${12 + i * 14}%`,
-                  animation: `koya-drop ${5 + (i % 3)}s linear ${i * 0.9}s infinite`,
+                  background: 'linear-gradient(to right, var(--color-sky), var(--color-lilac) 70%)',
                 }}
-              >
-                {emoji}
-              </span>
-            ))}
-            {myTeam && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ delay: 0.5, type: 'spring', stiffness: 120 }}
-                className="glass-dark absolute right-4 top-4 rounded-2xl px-4 py-3"
-              >
-                <div className="text-xs font-semibold uppercase tracking-wider text-white/70">
-                  Рейтинг героя
-                </div>
-                <div className="my-1"><Stars value={heroStars} size={20} /></div>
-                <div className="font-display text-2xl font-extrabold">{heroStars.toFixed(1)}</div>
-              </motion.div>
-            )}
-          </div>
+              />
+              <img
+                src="/koya/koya-hero-crop.webp"
+                alt="Маскот КОЯ"
+                className="absolute inset-0 h-full w-full object-cover"
+                style={{
+                  objectPosition: '50% 58%',
+                  // Линейное угасание по всей высоте левого края (не радиальная виньетка —
+                  // та тает только по углам и оставляет шов посередине высоты).
+                  maskImage: 'linear-gradient(to right, transparent 0%, black 24%)',
+                  WebkitMaskImage: '-webkit-linear-gradient(to right, transparent 0%, black 24%)',
+                }}
+              />
+              {/* падающие коечки */}
+              {['🪙', '⭐', '🐾', '🪙', '⭐', '🐾'].map((emoji, i) => (
+                <span
+                  key={`koya-drop-${i}`}
+                  className="pointer-events-none absolute top-0 text-2xl"
+                  style={{
+                    left: `${12 + i * 14}%`,
+                    animation: `koya-drop ${5 + (i % 3)}s linear ${i * 0.9}s infinite`,
+                  }}
+                >
+                  {emoji}
+                </span>
+              ))}
+              {myTeam && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ delay: 0.5, type: 'spring', stiffness: 120 }}
+                  className="glass-dark absolute right-4 top-4 rounded-2xl px-4 py-3"
+                  style={{ transform: 'translateZ(40px)' }}
+                >
+                  <div className="text-xs font-semibold uppercase tracking-wider text-white/70">
+                    Рейтинг героя
+                  </div>
+                  <div className="my-1"><Stars value={heroStars} size={20} animate /></div>
+                  <div className="font-display text-2xl font-extrabold">
+                    <CountUp value={heroStars} decimals={1} />
+                  </div>
+                </motion.div>
+              )}
+            </div>
+          </Tilt>
         </div>
       </motion.section>
 
@@ -443,7 +458,7 @@ function RatingRowView({
         <div className="truncate text-sm font-bold">{name}{me && <span className="ml-1 text-alfa">· вы</span>}</div>
         <div className="text-xs font-semibold text-ink-soft">{site}</div>
       </div>
-      <div className="text-base font-bold">{total}</div>
+      <div className="text-base font-bold"><CountUp value={total} /></div>
     </div>
   )
 }
