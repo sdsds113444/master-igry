@@ -390,6 +390,14 @@ export default function TeamCabinet() {
                       className="hidden"
                       onChange={(e) => {
                         const f = e.target.files?.[0] ?? null
+                        // Потолок согласован с запасным каналом /sb (прокси Vercel обрывает
+                        // запросы длиннее 120 с — большой файл на слабой сети не успеет).
+                        if (f && f.size > 15 * 1024 * 1024) {
+                          setSendError('Файл больше 15 МБ — сожмите его и прикрепите снова.')
+                          e.target.value = ''
+                          return
+                        }
+                        setSendError('')
                         setFile(f)
                         if (f) setFileAttached(f.name)
                       }}

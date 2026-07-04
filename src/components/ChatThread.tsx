@@ -34,6 +34,17 @@ export default function ChatThread({
   const [confirmed, setConfirmed] = useState(asAdmin || !!getDisplayName())
   const [error, setError] = useState('')
 
+  const LOAD_ERROR = 'Не удалось загрузить сообщения.'
+
+  /** Дописать недостающие сообщения (дедуп по id — история/сокет/опрос могут пересекаться). */
+  function mergeMessages(incoming: ChatMsg[]) {
+    setChat((c) => {
+      const seen = new Set(c.map((x) => x.id))
+      const fresh = incoming.filter((m) => !seen.has(m.id))
+      return fresh.length ? [...c, ...fresh] : c
+    })
+  }
+
   useEffect(() => {
     if (!active || !teamId) return
     let unsub: { unsubscribe(): void } | null = null
@@ -45,10 +56,15 @@ export default function ChatThread({
         if (cancelled) return
         setChat(msgs)
       } catch {
-        if (!cancelled) setError('Не удалось загрузить сообщения.')
+        if (!cancelled) setError(LOAD_ERROR)
       }
-      // dedup по id — на случай повторной доставки (реконнект/двойная подписка в dev)
-      const liveSub = subscribeMessages(teamId, (m) => setChat((c) => (c.some((x) => x.id === m.id) ? c : [...c, m])), channel)
+      // dedup по id — на случай повторной доставки (реконнект/двойная подписка в dev).
+      // Если начальная загрузка упала, но сообщения потом доехали (опрос-фолбэк/сокет) —
+      // гасим устаревший баннер ошибки загрузки (ошибку ОТПРАВКИ не трогаем).
+      const liveSub = subscribeMessages(teamId, (m) => {
+        mergeMessages([m])
+        setError((prev) => (prev === LOAD_ERROR ? '' : prev))
+      }, channel)
       if (cancelled) { liveSub.unsubscribe(); return }
       unsub = liveSub
     }
@@ -74,6 +90,11 @@ export default function ChatThread({
     setError('')
     try {
       await sendMessage(teamId, asAdmin ? 'Тренер' : (getDisplayName() ?? myName), text, channel)
+      // Сразу дотягиваем историю: в polling-режиме (сокет заблокирован) своё сообщение
+      // иначе появится только через ~8с — человек решит, что не отправилось, и зашлёт дубль.
+      try {
+        mergeMessages(await listMessages(teamId, channel))
+      } catch { /* не страшно: доедет следующим опросом или по сокету */ }
     } catch {
       setInput(text) // возвращаем текст, чтобы не потерять сообщение
       setError('Сообщение не отправилось — попробуйте ещё раз.')

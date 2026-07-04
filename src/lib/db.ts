@@ -5,7 +5,7 @@
 //   true  → живая база Supabase (анонимный вход + привязка к команде по коду).
 // Все функции async, чтобы сигнатуры не менялись при переключении режима.
 
-import { isSupabaseConfigured, supabase, requireClient } from './supabase'
+import { isSupabaseConfigured, supabase, requireClient, toProxyUrl } from './supabase'
 import {
   TEAMS, GAMES, FEED, ROSTER_SEED, TEAM_CHAT_SEED,
   type TeamScore, type CaseItem, type Game, type FeedItem,
@@ -109,7 +109,12 @@ const mockSubmissions: Record<string, { answer: string; fileName: string | null 
 async function ensureAnon() {
   const sb = requireClient()
   const { data } = await sb.auth.getSession()
-  if (!data.session) await sb.auth.signInAnonymously()
+  if (!data.session) {
+    const { error } = await sb.auth.signInAnonymously()
+    // 429 (лимит анонимных регистраций на IP) — покажем «слишком много попыток»,
+    // а не «проверьте соединение»: у человека с верным кодом соединение в порядке.
+    if (error) throw (error as { status?: number }).status === 429 ? new TooManyAttemptsError() : error
+  }
   // запоминаем стабильный id этой сессии для computeMe
   const { data: after } = await sb.auth.getSession()
   setMyUid(after.session?.user?.id ?? null)
@@ -281,6 +286,36 @@ export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void, c
   // React StrictMode двойного монтирования эффекта в dev) создаёт второй канал
   // с тем же именем на том же сокете, и обе подписки начинают работать нестабильно.
   const topic = `chat-${key}-${Math.random().toString(36).slice(2)}`
+
+  // Фолбэк, когда realtime-сокет не поднимается (мобильные операторы режут
+  // wss://*.supabase.co, а его, в отличие от HTTP, через Vercel не проксировать):
+  // опрашиваем историю раз в 8 секунд. Подписчик (ChatThread) дедупит по id,
+  // поэтому пересечение опроса с историей/сокетом безопасно.
+  let pollTimer: number | null = null
+  let pollGen = 0      // растёт при stopPolling — гасит результаты уже улетевших тиков
+  let pollBusy = false // на медленной сети тик может идти дольше интервала — не копим параллельные
+  let stopped = false
+
+  async function pollOnce(gen: number) {
+    if (pollBusy) return
+    pollBusy = true
+    try {
+      const msgs = await listMessages(teamId, channel)
+      if (!stopped && gen === pollGen) msgs.forEach(onMsg)
+    } catch { /* сеть моргнула — попробуем в следующий тик */
+    } finally { pollBusy = false }
+  }
+  function startPolling() {
+    if (stopped || pollTimer !== null) return
+    const gen = pollGen
+    void pollOnce(gen) // первый снапшот сразу: к этому моменту уже прошёл ~10с join-timeout сокета
+    pollTimer = window.setInterval(() => { void pollOnce(gen) }, 8000)
+  }
+  function stopPolling() {
+    pollGen++
+    if (pollTimer !== null) { window.clearInterval(pollTimer); pollTimer = null }
+  }
+
   const ch = sb
     .channel(topic)
     .on(
@@ -293,9 +328,23 @@ export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void, c
         onMsg({ id: m.id, author: m.author, text: m.text, time: hhmm(m.created_at), role, me: computeMe(m.author, role, m.user_id ?? null) })
       },
     )
-    .subscribe()
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        const wasPolling = pollTimer !== null
+        stopPolling()
+        // Catch-up: realtime доставляет только INSERT'ы ПОСЛЕ подтверждения подписки,
+        // а опрос уже остановлен — закрываем окно между ними одним финальным снапшотом.
+        if (wasPolling) {
+          listMessages(teamId, channel)
+            .then((msgs) => { if (!stopped) msgs.forEach(onMsg) })
+            .catch(() => { /* не критично: история уже на экране, новое доставит сокет */ })
+        }
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') startPolling()
+    })
   return {
     unsubscribe() {
+      stopped = true
+      stopPolling()
       sb.removeChannel(ch)
     },
   }
@@ -406,7 +455,9 @@ export async function getAnswerFileUrl(filePath: string): Promise<string | null>
   const sb = requireClient()
   const { data, error } = await sb.storage.from('answers').createSignedUrl(filePath, 60 * 10)
   if (error) return null
-  return data?.signedUrl ?? null
+  // signed-URL открывается отдельной ссылкой мимо клиента → тоже ведём через /sb-прокси,
+  // иначе скачивание с мобильной сети упрётся в заблокированный supabase.co
+  return data?.signedUrl ? toProxyUrl(data.signedUrl) : null
 }
 
 export interface GradeInput { teamId: string; gameId: string; cases: number; bonus: number; superBonus: number; fcr: number; vok: number; superBonusVok: number; feedback: string }

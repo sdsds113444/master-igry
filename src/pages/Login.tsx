@@ -38,7 +38,16 @@ export default function Login() {
       if (e instanceof TooManyAttemptsError) {
         setError('Слишком много попыток. Подождите пару минут и попробуйте снова.')
       } else {
-        setError('Не удалось войти. Проверьте соединение и попробуйте ещё раз.')
+        // Короткая техдеталь — чтобы по скриншоту тестировщика было видно,
+        // СЕТЬ это или что-то другое, а не гадать по общему тексту. Известные
+        // сетевые ошибки переводим на русский, остальное явно помечаем.
+        console.error('Вход не удался:', e)
+        const raw = e instanceof Error ? e.message : ''
+        const isNet = /failed to fetch|networkerror|load failed|timed? ?out|aborted/i.test(raw)
+        const detail = isNet
+          ? ' Похоже, сеть блокирует запрос — попробуйте другой Wi-Fi или мобильный интернет.'
+          : raw ? ` (техдеталь для поддержки: ${raw.slice(0, 60)})` : ''
+        setError(`Не удалось войти. Проверьте соединение и попробуйте ещё раз.${detail}`)
       }
     } finally {
       window.clearTimeout(slowTimer)
@@ -116,7 +125,7 @@ export default function Login() {
 
             {loading && slowHint && (
               <p className="text-sm font-semibold text-ink-soft" role="status">
-                Первый вход занимает несколько секунд — сервер просыпается. Подождите…
+                Подключаемся к серверу — на слабой связи это может занять до полуминуты. Подождите…
               </p>
             )}
 
