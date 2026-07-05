@@ -1,11 +1,22 @@
 // Общие UI-константы и формулы, чтобы не дублировать их по страницам.
 
-/** Рейтинг героя (3..5 звёзд) по месту в общем зачёте из 30 команд.
- *  Раньше формула была скопирована в Board и TeamCabinet — теперь один источник.
- *  Знаменатель 29 (=30−1): места 1..30 — это 29 шагов, поэтому 1-е место даёт ровно
- *  5.0, а 30-е и хуже — 3.0 (при знаменателе 30 лидер получал бы 4.93 → «4.9»). */
-export function heroStars(rank: number): number {
-  return 3 + (Math.min(29, Math.max(0, 30 - rank)) / 29) * 2
+/** Статус места в общем зачёте — понятная замена «рейтингу героя» в звёздах
+ *  (звёзды путали: воспринимались как оценка 5/5, а не как место в таблице).
+ *  Показываем прямо: число места + прогресс-бар «сколько прошли до топа» + короткий
+ *  словесный статус. color — акцентный цвет тира (для прогресс-бара/текста). */
+export interface RankTier { emoji: string; label: string; color: string }
+export function rankTier(rank: number, total = 30): RankTier {
+  if (rank <= 3) return { emoji: '🏆', label: 'Топ-3 сезона', color: 'var(--color-gold)' }
+  if (rank <= 10) return { emoji: '🔥', label: 'В десятке лучших', color: 'var(--color-alfa)' }
+  if (rank <= Math.ceil(total / 2)) return { emoji: '💪', label: 'Крепкая середина', color: 'var(--color-alfa)' }
+  return { emoji: '📈', label: 'Есть куда расти', color: 'var(--color-ink-soft, #7a8291)' }
+}
+
+/** Прогресс «насколько близко к 1-му месту», в процентах: 1-е место → 100%,
+ *  последнее (total-е) → 0%. Для прогресс-бара рядом с местом. */
+export function rankPercent(rank: number, total = 30): number {
+  const r = Math.min(total, Math.max(1, rank))
+  return Math.round(((total - r) / (total - 1)) * 100)
 }
 
 /** Имя файла из пути хранилища ('team/game/отчёт.xlsx' → 'отчёт.xlsx').

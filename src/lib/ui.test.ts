@@ -1,24 +1,38 @@
 import { describe, it, expect } from 'vitest'
-import { heroStars } from './ui'
+import { rankTier, rankPercent } from './ui'
 
-describe('heroStars', () => {
-  it('всегда в диапазоне 3..5 для мест 1..30', () => {
-    for (let rank = 1; rank <= 30; rank++) {
-      const v = heroStars(rank)
-      expect(v).toBeGreaterThanOrEqual(3)
-      expect(v).toBeLessThanOrEqual(5)
-    }
+describe('rankTier', () => {
+  it('топ-3 — отдельный тир', () => {
+    expect(rankTier(1).label).toBe('Топ-3 сезона')
+    expect(rankTier(3).label).toBe('Топ-3 сезона')
   })
-  it('1 место — максимум звёзд', () => {
-    expect(heroStars(1)).toBeGreaterThan(heroStars(2))
+  it('топ-10 (кроме топ-3)', () => {
+    expect(rankTier(4).label).toBe('В десятке лучших')
+    expect(rankTier(10).label).toBe('В десятке лучших')
   })
-  it('1 место даёт ровно 5.0 (без off-by-one 4.9)', () => {
-    expect(heroStars(1)).toBe(5)
+  it('середина таблицы', () => {
+    expect(rankTier(11).label).toBe('Крепкая середина')
+    expect(rankTier(15).label).toBe('Крепкая середина')
   })
-  it('30 место даёт ровно 3.0', () => {
-    expect(heroStars(30)).toBe(3)
+  it('нижняя половина', () => {
+    expect(rankTier(16).label).toBe('Есть куда расти')
+    expect(rankTier(30).label).toBe('Есть куда расти')
   })
-  it('места хуже 30-го не опускают ниже 3', () => {
-    expect(heroStars(100)).toBe(3)
+})
+
+describe('rankPercent', () => {
+  it('1-е место — 100%', () => {
+    expect(rankPercent(1)).toBe(100)
+  })
+  it('последнее место (30-е из 30) — 0%', () => {
+    expect(rankPercent(30)).toBe(0)
+  })
+  it('монотонно убывает с ростом номера места', () => {
+    expect(rankPercent(5)).toBeGreaterThan(rankPercent(15))
+    expect(rankPercent(15)).toBeGreaterThan(rankPercent(25))
+  })
+  it('не выходит за 0..100 для мест за пределами диапазона', () => {
+    expect(rankPercent(0)).toBeLessThanOrEqual(100)
+    expect(rankPercent(100)).toBeGreaterThanOrEqual(0)
   })
 })

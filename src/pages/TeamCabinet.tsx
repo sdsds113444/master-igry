@@ -13,9 +13,8 @@ import {
   getCases, getScores, getSubmission, submitAnswer, getGames, pickCurrentGame,
   type TeamInfo, type RosterMember,
 } from '../lib/db'
-import { heroStars as heroStarsOf, DEADLINE, diffBadge, teamAvatar, basename } from '../lib/ui'
+import { rankTier, rankPercent, DEADLINE, diffBadge, teamAvatar, basename } from '../lib/ui'
 import { teamTotal } from '../lib/scoring'
-import Stars from '../components/Stars'
 import VideoModal from '../components/VideoModal'
 import MentorChatModal from '../components/MentorChatModal'
 import ChatThread from '../components/ChatThread'
@@ -95,7 +94,8 @@ export default function TeamCabinet() {
     return () => { cancelled = true }
   }, [])
 
-  const heroStars = heroStarsOf(rank)
+  const tier = rankTier(rank)
+  const rankProgress = rankPercent(rank)
 
   async function addPlayer(e: React.FormEvent) {
     e.preventDefault()
@@ -442,7 +442,7 @@ export default function TeamCabinet() {
 
         {/* ==== ПРАВАЯ КОЛОНКА ==== */}
         <aside className="space-y-4">
-          {/* Рейтинг героя с маскотом КОЯ */}
+          {/* Место в сезоне с маскотом КОЯ */}
           <div className="glass-strong relative overflow-hidden rounded-glass">
             <div className="flex items-stretch">
               <div className="relative w-32 shrink-0 sm:w-36">
@@ -459,16 +459,19 @@ export default function TeamCabinet() {
               </div>
               <div className="flex flex-1 flex-col items-center justify-center py-5 px-4 text-center">
                 <div className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
-                  Рейтинг героя
-                </div>
-                <div className="my-1.5">
-                  <Stars value={heroStars} size={20} />
+                  Место в сезоне
                 </div>
                 <div className="font-display text-3xl font-extrabold leading-none">
-                  {heroStars.toFixed(1)}
+                  #{rank}
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5 text-sm font-bold" style={{ color: tier.color }}>
+                  <span>{tier.emoji}</span> {tier.label}
+                </div>
+                <div className="mt-2 h-2 w-full max-w-[140px] overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
+                  <div className="h-full rounded-full transition-[width]" style={{ width: `${rankProgress}%`, background: tier.color }} />
                 </div>
                 <div className="mt-1 text-xs font-semibold text-ink-soft">
-                  #{rank} место из 30
+                  из 30 команд
                 </div>
               </div>
             </div>

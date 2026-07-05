@@ -7,8 +7,7 @@ import {
   getSession, listTeamsRating, getGames, listFeed, pickCurrentGame,
   type RatingRow, type FeedRow,
 } from '../lib/db'
-import { heroStars as heroStarsOf, fadeUp, teamAvatar } from '../lib/ui'
-import Stars from '../components/Stars'
+import { rankTier, rankPercent, fadeUp, teamAvatar } from '../lib/ui'
 import VideoModal from '../components/VideoModal'
 import Badge from '../components/Badge'
 import Tilt from '../components/Tilt'
@@ -92,7 +91,6 @@ export default function Board() {
 
   const myRating = rating?.find((r) => r.id === myTeamId)
   const myRank = myRating?.rank ?? 1
-  const heroStars = heroStarsOf(myRank) // 3..5
   const inPrizes = !!myRating && myRating.rank <= 3 // призовая тройка → залп конфетти
 
   if (error) {
@@ -238,23 +236,41 @@ export default function Board() {
                   {emoji}
                 </span>
               ))}
-              {myTeamId && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  transition={{ delay: 0.5, type: 'spring', stiffness: 120 }}
-                  className="glass-dark absolute right-4 top-4 rounded-2xl px-4 py-3"
-                  style={{ transform: 'translateZ(40px)' }}
-                >
-                  <div className="text-xs font-semibold uppercase tracking-wider text-white/70">
-                    Рейтинг героя
-                  </div>
-                  <div className="my-1"><Stars value={heroStars} size={20} animate /></div>
-                  <div className="font-display text-2xl font-extrabold">
-                    <CountUp value={heroStars} decimals={1} />
-                  </div>
-                </motion.div>
-              )}
+              {myTeamId && (() => {
+                const tier = rankTier(myRank)
+                const percent = rankPercent(myRank)
+                return (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    transition={{ delay: 0.5, type: 'spring', stiffness: 120 }}
+                    className="glass-dark absolute right-4 top-4 rounded-2xl px-4 py-3"
+                    style={{ transform: 'translateZ(40px)' }}
+                  >
+                    <div className="text-xs font-semibold uppercase tracking-wider text-white/70">
+                      Место в сезоне
+                    </div>
+                    <div className="mt-1 flex items-baseline gap-1.5">
+                      <span className="font-display text-2xl font-extrabold text-white">
+                        #<CountUp value={myRank} />
+                      </span>
+                      <span className="text-xs font-bold text-white/80">из 30</span>
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-1.5 text-xs font-bold text-white/90">
+                      <span>{tier.emoji}</span> {tier.label}
+                    </div>
+                    <div className="mt-1.5 h-1.5 w-28 overflow-hidden rounded-full bg-white/20">
+                      <motion.div
+                        className="h-full rounded-full"
+                        style={{ background: tier.color }}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${percent}%` }}
+                        transition={{ delay: 0.7, duration: 0.8 }}
+                      />
+                    </div>
+                  </motion.div>
+                )
+              })()}
             </div>
           </Tilt>
         </div>
