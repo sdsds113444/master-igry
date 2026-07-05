@@ -12,7 +12,11 @@ export default function Dialog({
   ariaLabel,
   title,
   children,
-  panelClassName = 'w-full max-w-md',
+  // По умолчанию панель ограничена по высоте и прокручивается: на низком вьюпорте
+  // (телефон в ландшафте, открытая клавиатура) высокая форма раньше обрезалась —
+  // низ с кнопкой был недостижим, т.к. скролл body залочен. Модалки со своей
+  // раскладкой (напр. чат) передают собственный panelClassName и управляют высотой сами.
+  panelClassName = 'w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto',
 }: {
   open: boolean
   onClose: () => void
@@ -39,7 +43,7 @@ export default function Dialog({
             aria-modal="true"
             aria-label={ariaLabel}
             tabIndex={-1}
-            className={`glass-strong relative z-10 overflow-hidden rounded-glass ${panelClassName}`}
+            className={`glass-strong relative z-10 rounded-glass ${panelClassName}`}
             initial={{ scale: 0.94, y: 12 }}
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.96, opacity: 0 }}

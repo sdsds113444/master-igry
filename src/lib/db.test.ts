@@ -18,18 +18,28 @@ describe('normalizeCode (устойчивость к мобильным клав
   })
 })
 
+describe('normalizeCode (кириллические омоглифы)', () => {
+  it('транслитерирует К/О/… с русской раскладки в латиницу', () => {
+    expect(normalizeCode('КОYA-04')).toBe('KOYA-04') // К, О — кириллица
+    expect(normalizeCode('КОУА-04')).toBe('KOYA-04') // весь префикс кириллицей
+  })
+})
+
 const g = (id: string, num: number, status: Game['status']): Game => ({
   id, num, week: num, title: id, skill: '', emoji: '', accent: '', status,
 })
 
 describe('pickCurrentGame', () => {
   it('берёт последнюю по номеру среди статуса current', () => {
-    expect(pickCurrentGame([g('a', 1, 'done'), g('b', 2, 'current'), g('c', 3, 'current')]).id).toBe('c')
+    expect(pickCurrentGame([g('a', 1, 'done'), g('b', 2, 'current'), g('c', 3, 'current')])?.id).toBe('c')
   })
   it('если current нет — первую незакрытую (не done)', () => {
-    expect(pickCurrentGame([g('a', 1, 'done'), g('b', 2, 'locked')]).id).toBe('b')
+    expect(pickCurrentGame([g('a', 1, 'done'), g('b', 2, 'locked')])?.id).toBe('b')
   })
   it('если все done — первую игру', () => {
-    expect(pickCurrentGame([g('a', 1, 'done'), g('b', 2, 'done')]).id).toBe('a')
+    expect(pickCurrentGame([g('a', 1, 'done'), g('b', 2, 'done')])?.id).toBe('a')
+  })
+  it('на пустом списке возвращает null (без TypeError у вызывающих)', () => {
+    expect(pickCurrentGame([])).toBeNull()
   })
 })

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Send } from 'lucide-react'
 import {
   listMessages, sendMessage, subscribeMessages, getDisplayName, setDisplayName,
@@ -33,6 +33,7 @@ export default function ChatThread({
   const [myName, setMyName] = useState(asAdmin ? 'Тренер' : (getDisplayName() ?? ''))
   const [confirmed, setConfirmed] = useState(asAdmin || !!getDisplayName())
   const [error, setError] = useState('')
+  const listRef = useRef<HTMLDivElement>(null)
 
   const LOAD_ERROR = 'Не удалось загрузить сообщения.'
 
@@ -45,6 +46,14 @@ export default function ChatThread({
     })
   }
 
+  // Автопрокрутка к последним сообщениям: список рендерится хронологически сверху
+  // вниз, новые приходят в конец — без этого свежий ответ тренера и своё
+  // отправленное сообщение оставались бы за нижней кромкой видимой области.
+  useEffect(() => {
+    const el = listRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [chat.length])
+
   useEffect(() => {
     if (!active || !teamId) return
     let unsub: { unsubscribe(): void } | null = null
@@ -54,7 +63,9 @@ export default function ChatThread({
       try {
         const msgs = await listMessages(teamId, channel)
         if (cancelled) return
-        setChat(msgs)
+        // merge, а не setChat: если сокет успел доставить сообщение раньше, чем
+        // догрузилась история, полная замена затёрла бы его.
+        mergeMessages(msgs)
       } catch {
         if (!cancelled) setError(LOAD_ERROR)
       }
@@ -96,14 +107,16 @@ export default function ChatThread({
         mergeMessages(await listMessages(teamId, channel))
       } catch { /* не страшно: доедет следующим опросом или по сокету */ }
     } catch {
-      setInput(text) // возвращаем текст, чтобы не потерять сообщение
+      // Возвращаем текст только в ПУСТОЕ поле: отправка идёт секунды, за это время
+      // пользователь мог начать печатать новое сообщение — не затираем его.
+      setInput((cur) => (cur ? cur : text))
       setError('Сообщение не отправилось — попробуйте ещё раз.')
     }
   }
 
   return (
     <>
-      <div className={`space-y-2 overflow-y-auto pr-1 ${scrollClass}`}>
+      <div ref={listRef} className={`space-y-2 overflow-y-auto pr-1 ${scrollClass}`}>
         {chat.map((m) => (
           <div key={m.id} className={`flex ${m.me ? 'justify-end' : ''}`}>
             <div className={`max-w-[82%] rounded-2xl px-3 py-2 ${m.me ? 'bg-alfa text-white' : 'sf-3'}`}>

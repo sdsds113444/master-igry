@@ -12,6 +12,12 @@ describe('heroStars', () => {
   it('1 место — максимум звёзд', () => {
     expect(heroStars(1)).toBeGreaterThan(heroStars(2))
   })
+  it('1 место даёт ровно 5.0 (без off-by-one 4.9)', () => {
+    expect(heroStars(1)).toBe(5)
+  })
+  it('30 место даёт ровно 3.0', () => {
+    expect(heroStars(30)).toBe(3)
+  })
   it('места хуже 30-го не опускают ниже 3', () => {
     expect(heroStars(100)).toBe(3)
   })

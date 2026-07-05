@@ -70,8 +70,6 @@ export const GAMES: Game[] = [
   { id: 'marathon', num: 7, week: 7, title: 'Альфа-марафон сезона', skill: 'Финал: публичная аттестация площадки', emoji: '🏁', accent: '#1ea672', status: 'locked' },
 ]
 
-export const CURRENT_GAME = GAMES.find((g) => g.status === 'current')!
-
 /** Стартовый мультик КОЯ (из письма-приглашения). */
 export const START_VIDEO = '/video/mult-start.mp4'
 
@@ -167,9 +165,6 @@ export const TEAMS: Team[] = NAMES.map((name, i) => {
 })
   .sort((a, b) => b.total - a.total)
   .map((t, idx) => ({ ...t, rank: idx + 1 } as Team & { rank: number })) as (Team & { rank: number })[]
-
-/** Команда, под которой «залогинен» демо-пользователь */
-export const MY_TEAM_CODE = 'KOYA-04'
 
 /* ---- Лента доски ---- */
 export const FEED: FeedItem[] = [

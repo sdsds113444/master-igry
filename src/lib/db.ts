@@ -6,6 +6,7 @@
 // Все функции async, чтобы сигнатуры не менялись при переключении режима.
 
 import { isSupabaseConfigured, supabase, requireClient, toProxyUrl } from './supabase'
+import { basename } from './ui'
 import {
   TEAMS, GAMES, FEED, ROSTER_SEED, TEAM_CHAT_SEED,
   type TeamScore, type CaseItem, type Game, type FeedItem,
@@ -19,6 +20,9 @@ export interface TeamInfo {
   id: string; code: string; name: string; site: string; mentor: string; hue: number; coins: number
 }
 export interface AdminTeamRow { id: string; code: string; name: string; site: string; hue: number }
+/** Игрок состава. id — ключ строки в БД: операции идут по нему, а не по имени
+ *  (иначе полные тёзки в команде удалялись/ломались пачкой). */
+export interface RosterMember { id: string; name: string; isCaptain: boolean }
 export interface GradeRow { cases: number; bonus: number; superBonus: number; fcr: number; vok: number; superBonusVok: number; feedback: string }
 
 // Демо-код админки ТОЛЬКО для офлайн-режима (моки, без реальных данных).
@@ -36,16 +40,21 @@ function throwOn(error: unknown) {
   if (error) throw error
 }
 
+/** Контекст «кто я» для решения «моё сообщение?». Считается ОДИН раз на выборку,
+ *  а не читается из localStorage для каждого из ≤200 сообщений. */
+interface MeContext { isAdmin: boolean; uid: string | null; displayName: string | null }
+function readMeContext(): MeContext {
+  return { isAdmin: getSession()?.role === 'admin', uid: getMyUid(), displayName: getDisplayName() }
+}
+
 /** «Это моё сообщение?» — по стабильному auth-id, а не по совпадению подписи.
  *  Тренер (админ) считает своими сообщения с ролью admin; игрок — свои по user_id
  *  (падает на сравнение по подписи только для старых сообщений без user_id). */
-function computeMe(author: string, role: Role, userId?: string | null): boolean {
-  const ses = getSession()
-  if (ses?.role === 'admin') return role === 'admin'
+function computeMe(ctx: MeContext, author: string, role: Role, userId?: string | null): boolean {
+  if (ctx.isAdmin) return role === 'admin'
   if (role === 'admin') return false
-  const myUid = getMyUid()
-  if (myUid && userId) return userId === myUid
-  return author === getDisplayName()
+  if (ctx.uid && userId) return userId === ctx.uid
+  return author === ctx.displayName
 }
 
 // ---------- локальная «сессия» (какая команда сейчас вошла) ----------
@@ -82,7 +91,12 @@ export async function signOut() {
 export async function reconcileSession(): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return false
   if (!getSession()) return false
-  const { data } = await supabase.auth.getSession()
+  const { data, error } = await supabase.auth.getSession()
+  // Различаем «сессии точно нет» и «не смогли проверить». При сетевом сбое рефреша
+  // (истёкший токен + заблокированный supabase.co — ровно сценарий, ради которого
+  // сделан прокси) getSession вернёт session=null И error: разлогинивать в этом
+  // случае нельзя, иначе одно моргание сети выбрасывает команду на экран входа.
+  if (error) return false
   if (!data.session) {
     await signOut()
     return true
@@ -100,7 +114,11 @@ export function setDisplayName(name: string) {
 }
 
 // ---------- мок-хранилище в памяти (чтобы add/remove/send «жили» в демо) ----------
-const mockRoster: Record<string, string[]> = {}
+let mockRosterId = 0
+function seedRoster(): RosterMember[] {
+  return ROSTER_SEED.map((name, i) => ({ id: `seed-${mockRosterId++}`, name, isCaptain: i === 0 }))
+}
+const mockRoster: Record<string, RosterMember[]> = {}
 const mockChat: Record<string, ChatMsg[]> = {}
 const mockSubs: Record<string, ((m: ChatMsg) => void)[]> = {}
 const mockSubmissions: Record<string, { answer: string; fileName: string | null }> = {}
@@ -131,6 +149,10 @@ export function normalizeCode(code: string): string {
   return code
     .toUpperCase()
     .replace(/[‐-―−⁃﹣－]/g, '-') // en/em-dash, minus и т.п. → '-'
+    // Кириллические омоглифы → латиница: на русской раскладке телефона «КОYA-04»
+    // визуально не отличить от латинского кода, но без этого К/О/… просто
+    // выкидывались бы, и человек с верным кодом видел «код не найден».
+    .replace(/[АВЕКМНОРСТУХ]/g, (c) => 'ABEKMHOPCTYX'['АВЕКМНОРСТУХ'.indexOf(c)])
     .replace(/[^A-Z0-9-]/g, '')
 }
 
@@ -139,7 +161,10 @@ export async function signInByCode(code: string): Promise<Session | null> {
 
   if (!isSupabaseConfigured) {
     if (norm === MOCK_ADMIN_CODE) {
-      const s: Session = { teamId: null, code: norm, role: 'admin', name: 'Админ', hue: 0 }
+      // code НЕ сохраняем для админа: админ-код — единственный секрет входа, а сессия
+      // лежит в localStorage открытым текстом (общие рабочие станции КЦ). В шапке
+      // (Layout) код показывается только игрокам, админу он в сессии не нужен.
+      const s: Session = { teamId: null, code: '', role: 'admin', name: 'Админ', hue: 0 }
       setSession(s)
       return s
     }
@@ -166,7 +191,8 @@ export async function signInByCode(code: string): Promise<Session | null> {
   const res = data as { role: Role; team?: TeamInfo }
   const s: Session =
     res.role === 'admin'
-      ? { teamId: null, code: norm, role: 'admin', name: 'Админ', hue: 0 }
+      // code админа НЕ кладём в сессию (см. коммент выше про localStorage на общих ПК).
+      ? { teamId: null, code: '', role: 'admin', name: 'Админ', hue: 0 }
       : { teamId: res.team!.id, code: res.team!.code, role: 'player', name: res.team!.name, hue: res.team!.hue }
   setSession(s)
   return s
@@ -190,34 +216,41 @@ export async function getMyTeam(): Promise<TeamInfo | null> {
   return (data as TeamInfo) ?? null
 }
 
-export async function getRoster(teamId: string): Promise<string[]> {
+export async function getRoster(teamId: string): Promise<RosterMember[]> {
   if (!isSupabaseConfigured) {
-    return mockRoster[teamId] ?? (mockRoster[teamId] = [...ROSTER_SEED])
+    return mockRoster[teamId] ?? (mockRoster[teamId] = seedRoster())
   }
   const sb = requireClient()
-  const { data, error } = await sb.from('roster').select('full_name').eq('team_id', teamId)
+  const { data, error } = await sb.from('roster').select('id, full_name, is_captain').eq('team_id', teamId)
     .order('is_captain', { ascending: false }).order('ord')
   throwOn(error)
-  return (data ?? []).map((r) => r.full_name as string)
+  return (data ?? []).map((r) => ({ id: r.id as string, name: r.full_name as string, isCaptain: !!r.is_captain }))
 }
 
-export async function addPlayer(teamId: string, name: string): Promise<void> {
+/** Добавить игрока. Возвращает созданную строку (с реальным id) — вызывающий
+ *  использует id для последующего удаления, а не имя. */
+export async function addPlayer(teamId: string, name: string): Promise<RosterMember> {
   const n = name.trim()
-  if (!n) return
+  if (!n) throw new Error('empty_name')
   if (!isSupabaseConfigured) {
-    ;(mockRoster[teamId] ??= [...ROSTER_SEED]).push(n)
-    return
+    const m: RosterMember = { id: `mock-${mockRosterId++}`, name: n, isCaptain: false }
+    ;(mockRoster[teamId] ??= seedRoster()).push(m)
+    return m
   }
-  const { error } = await requireClient().from('roster').insert({ team_id: teamId, full_name: n, is_captain: false })
+  const { data, error } = await requireClient().from('roster')
+    .insert({ team_id: teamId, full_name: n, is_captain: false })
+    .select('id, full_name, is_captain').single()
   throwOn(error)
+  return { id: data!.id as string, name: data!.full_name as string, isCaptain: !!data!.is_captain }
 }
 
-export async function removePlayer(teamId: string, name: string): Promise<void> {
+/** Удалить игрока ПО id строки состава (не по имени — иначе стёрлись бы все тёзки). */
+export async function removePlayer(teamId: string, rosterId: string): Promise<void> {
   if (!isSupabaseConfigured) {
-    mockRoster[teamId] = (mockRoster[teamId] ?? []).filter((p) => p !== name)
+    mockRoster[teamId] = (mockRoster[teamId] ?? []).filter((p) => p.id !== rosterId)
     return
   }
-  const { error } = await requireClient().from('roster').delete().eq('team_id', teamId).eq('full_name', name)
+  const { error } = await requireClient().from('roster').delete().eq('team_id', teamId).eq('id', rosterId)
   throwOn(error)
 }
 
@@ -240,6 +273,7 @@ export async function listMessages(teamId: string, channel: ChatChannel = 'team'
   const { data, error } = await sb.from('messages').select('*')
     .eq('team_id', teamId).eq('channel', channel).order('created_at', { ascending: false }).limit(200)
   throwOn(error)
+  const ctx = readMeContext()
   return (data ?? []).reverse().map((m) => {
     const role = ((m.sender_role as Role) ?? 'player')
     return {
@@ -248,7 +282,7 @@ export async function listMessages(teamId: string, channel: ChatChannel = 'team'
       text: m.text as string,
       time: hhmm(m.created_at as string),
       role,
-      me: computeMe(m.author as string, role, (m.user_id as string) ?? null),
+      me: computeMe(ctx, m.author as string, role, (m.user_id as string) ?? null),
     }
   })
 }
@@ -298,6 +332,9 @@ export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void, c
 
   async function pollOnce(gen: number) {
     if (pollBusy) return
+    // В фоновой вкладке не опрашиваем: тянуть всю историю каждые 8с, когда чат не
+    // виден, — пустой расход сети/CPU. Вернётся на вкладку — следующий тик догонит.
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
     pollBusy = true
     try {
       const msgs = await listMessages(teamId, channel)
@@ -325,20 +362,20 @@ export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void, c
         const m = payload.new as { id: string; author: string; text: string; created_at: string; channel: ChatChannel; sender_role?: Role; user_id?: string }
         if (m.channel !== channel) return
         const role = m.sender_role ?? 'player'
-        onMsg({ id: m.id, author: m.author, text: m.text, time: hhmm(m.created_at), role, me: computeMe(m.author, role, m.user_id ?? null) })
+        onMsg({ id: m.id, author: m.author, text: m.text, time: hhmm(m.created_at), role, me: computeMe(readMeContext(), m.author, role, m.user_id ?? null) })
       },
     )
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
-        const wasPolling = pollTimer !== null
         stopPolling()
-        // Catch-up: realtime доставляет только INSERT'ы ПОСЛЕ подтверждения подписки,
-        // а опрос уже остановлен — закрываем окно между ними одним финальным снапшотом.
-        if (wasPolling) {
-          listMessages(teamId, channel)
-            .then((msgs) => { if (!stopped) msgs.forEach(onMsg) })
-            .catch(() => { /* не критично: история уже на экране, новое доставит сокет */ })
-        }
+        // Catch-up ВСЕГДА: realtime доставляет только INSERT'ы ПОСЛЕ подтверждения
+        // подписки, а между загрузкой истории и SUBSCRIBED проходит время джойна
+        // сокета (до ~10с). Сообщение, вставленное в это окно, не пришло бы ни в
+        // историю, ни в подписку — закрываем окно финальным снапшотом (дедуп по id
+        // в ChatThread безопасен). Раньше снапшот делался только if (wasPolling).
+        listMessages(teamId, channel)
+          .then((msgs) => { if (!stopped) msgs.forEach(onMsg) })
+          .catch(() => { /* не критично: история уже на экране, новое доставит сокет */ })
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') startPolling()
     })
   return {
@@ -413,7 +450,7 @@ export async function getSubmission(teamId: string, gameId: string): Promise<{ a
   throwOn(error)
   if (!data) return null
   const filePath = (data.file_url as string) ?? null
-  return { answer: (data.text as string) ?? '', fileName: filePath ? (filePath.split('/').pop() ?? filePath) : null, filePath }
+  return { answer: (data.text as string) ?? '', fileName: filePath ? basename(filePath) : null, filePath }
 }
 
 export interface SubmitInput { teamId: string; gameId: string; answer: string; file?: File | null }
@@ -470,12 +507,6 @@ function gradeRow(i: GradeInput) {
     fcr: i.fcr, vok: i.vok, super_bonus_vok: i.superBonusVok,
     feedback: i.feedback,
   }
-}
-
-export async function gradeSubmission(input: GradeInput): Promise<void> {
-  if (!isSupabaseConfigured) return
-  const { error } = await requireClient().from('scores').upsert(gradeRow(input), { onConflict: 'team_id,game_id' })
-  throwOn(error)
 }
 
 /** Пакетное сохранение баллов всей игры одним запросом (вместо 30 отдельных upsert). */
@@ -557,10 +588,12 @@ export async function getGames(): Promise<Game[]> {
   return (data as Game[] | null)?.length ? (data as Game[]) : GAMES
 }
 
-/** Текущая игра недели: последняя (по номеру) в статусе 'current'; иначе первая незакрытая. */
-export function pickCurrentGame(games: Game[]): Game {
+/** Текущая игра недели: последняя (по номеру) в статусе 'current'; иначе первая
+ *  незакрытая. Возвращает null на пустом списке — тип честный, чтобы вызывающий не
+ *  словил TypeError на `.id` (раньше тип обещал Game, а по факту мог быть undefined). */
+export function pickCurrentGame(games: Game[]): Game | null {
   const current = games.filter((g) => g.status === 'current').sort((a, b) => b.num - a.num)
-  return current[0] ?? games.find((g) => g.status !== 'done') ?? games[0]
+  return current[0] ?? games.find((g) => g.status !== 'done') ?? games[0] ?? null
 }
 
 export interface FeedRow { id: string; kind: FeedItem['kind']; title: string; text: string; date: string; emoji: string; gameId: string | null }
@@ -648,7 +681,7 @@ export async function listFeedback(): Promise<FeedbackRow[]> {
     got: (r.got as string) ?? '',
     device: (r.device as string) ?? '',
     status: r.status as FeedbackRow['status'],
-    createdAt: new Date(r.created_at as string).toLocaleString('ru', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
+    createdAt: feedDate(r.created_at as string),
   }))
 }
 

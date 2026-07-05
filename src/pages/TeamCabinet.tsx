@@ -11,15 +11,16 @@ import {
 import {
   getMyTeam, listTeamsRating, getRoster, addPlayer as dbAddPlayer, removePlayer as dbRemovePlayer,
   getCases, getScores, getSubmission, submitAnswer, getGames, pickCurrentGame,
-  type TeamInfo,
+  type TeamInfo, type RosterMember,
 } from '../lib/db'
-import { heroStars as heroStarsOf, DEADLINE, DIFF_BADGE, teamAvatar } from '../lib/ui'
+import { heroStars as heroStarsOf, DEADLINE, diffBadge, teamAvatar, basename } from '../lib/ui'
 import { teamTotal } from '../lib/scoring'
 import Stars from '../components/Stars'
 import VideoModal from '../components/VideoModal'
 import MentorChatModal from '../components/MentorChatModal'
 import ChatThread from '../components/ChatThread'
 import Badge from '../components/Badge'
+import ErrorCard from '../components/ErrorCard'
 
 export default function TeamCabinet() {
   const [me, setMe] = useState<TeamInfo | null>(null)
@@ -44,7 +45,7 @@ export default function TeamCabinet() {
   const [fileAttached, setFileAttached] = useState<string | null>(null) // имя для показа
   const [file, setFile] = useState<File | null>(null)                   // новый выбранный файл (грузим в Storage)
 
-  const [roster, setRoster] = useState<string[]>([])
+  const [roster, setRoster] = useState<RosterMember[]>([])
   const [newPlayer, setNewPlayer] = useState('')
   const [rosterError, setRosterError] = useState('')
 
@@ -53,14 +54,15 @@ export default function TeamCabinet() {
 
     async function load() {
       try {
-        const team = await getMyTeam()
+        // getMyTeam и getGames независимы — грузим параллельно (был водопад из трёх
+        // последовательных сетевых раундов).
+        const [team, gs] = await Promise.all([getMyTeam(), getGames()])
         if (cancelled) return
         setMe(team)
         if (!team) { setLoading(false); return }
 
-        const gs = await getGames()
-        if (cancelled) return
         const cur = pickCurrentGame(gs)
+        if (!cur) { setGames(gs); setCurrent(null); setLoading(false); return }
 
         const [rating, r, c, s, sub] = await Promise.all([
           listTeamsRating(),
@@ -100,44 +102,57 @@ export default function TeamCabinet() {
     const name = newPlayer.trim()
     if (!name || !me) return
     setRosterError('')
-    setRoster((r) => [...r, name])
+    // Оптимистично показываем с временным id, затем заменяем на строку из БД
+    // (с настоящим id) — откат тоже по id, а не по имени, чтобы не задеть тёзку.
+    const tempId = `tmp-${Date.now()}`
+    setRoster((r) => [...r, { id: tempId, name, isCaptain: false }])
     setNewPlayer('')
     try {
-      await dbAddPlayer(me.id, name)
+      const created = await dbAddPlayer(me.id, name)
+      setRoster((r) => r.map((p) => (p.id === tempId ? created : p)))
     } catch {
-      setRoster((r) => r.filter((p) => p !== name)) // откат оптимистичного добавления
+      setRoster((r) => r.filter((p) => p.id !== tempId)) // откат оптимистичного добавления
       setRosterError('Не удалось добавить игрока — попробуйте ещё раз.')
     }
   }
 
-  async function removePlayer(name: string) {
+  async function removePlayer(member: RosterMember) {
     if (!me) return
     const prev = roster
     setRosterError('')
-    setRoster((r) => r.filter((p) => p !== name))
+    setRoster((r) => r.filter((p) => p.id !== member.id))
     try {
-      await dbRemovePlayer(me.id, name)
+      await dbRemovePlayer(me.id, member.id)
     } catch {
       setRoster(prev) // откат: возвращаем игрока в список
       setRosterError('Не удалось убрать игрока — попробуйте ещё раз.')
     }
   }
 
+  // Есть что сдавать: непустой текст, новый файл или ранее прикреплённый файл.
+  // Иначе пустой upsert создал бы строку в answers, и админка сочла бы её «сдано».
+  const canSubmit = !!answer.trim() || !!file || !!fileAttached
+
   async function sendAnswer() {
-    if (!me || !current || sending) return // guard от двойной отправки
+    if (!me || !current || sending || !canSubmit) return // guard от двойной/пустой отправки
     setSendError('')
     setSending(true)
     try {
       // Реально загружаем файл (если выбран) в Storage и сохраняем ответ.
       const res = await submitAnswer({ teamId: me.id, gameId: current.id, answer, file })
-      const fresh = await getSubmission(me.id, current.id) // подтверждаем, что реально сохранилось
-      if (fresh) { setAnswer(fresh.answer); setFileAttached(fresh.fileName) }
       const hadFile = !!file
       setFile(null)
-      setSent(true) // помечаем «сдано» ТОЛЬКО после успешной записи в БД
+      setSent(true) // помечаем «сдано» СРАЗУ после успешного upsert — не привязываем к
+                    // подтверждающему чтению ниже (оно может моргнуть сетью и дать
+                    // ложную ошибку «не отправился», хотя ответ уже в БД).
       if (hadFile && !res.fileUploaded) {
         setSendError('Текст ответа сохранён, но файл пока не удалось прикрепить. Попробуйте прикрепить его чуть позже.')
       }
+      // Подтверждаем, что реально сохранилось (отдельно: сбой чтения не критичен).
+      try {
+        const fresh = await getSubmission(me.id, current.id)
+        if (fresh) { setAnswer(fresh.answer); setFileAttached(fresh.fileName) }
+      } catch { /* upsert уже прошёл — данные не потеряны */ }
     } catch {
       setSendError('Ответ не отправился. Проверьте соединение и попробуйте ещё раз.')
     } finally {
@@ -168,15 +183,7 @@ export default function TeamCabinet() {
   }
 
   if (loadError) {
-    return (
-      <div className="glass rounded-glass p-8 text-center">
-        <p className="font-display text-lg font-bold">Не удалось загрузить кабинет</p>
-        <p className="mt-1 text-sm text-ink-soft">Проверьте соединение и обновите страницу.</p>
-        <button onClick={() => window.location.reload()} className="btn-alfa mt-4 rounded-2xl px-5 py-2.5 text-sm font-bold">
-          Обновить
-        </button>
-      </div>
-    )
+    return <ErrorCard title="Не удалось загрузить кабинет" />
   }
 
   if (!me) {
@@ -188,13 +195,15 @@ export default function TeamCabinet() {
     )
   }
 
-  if (!current) return null
+  if (!current) {
+    return <ErrorCard title="Активная игра ещё не назначена" hint="Задание недели скоро появится — загляните чуть позже." />
+  }
 
   const videoTitle = `Мультик КОЯ — ${current.title}`
   // Ассеты из БД (video_url/file_url), с откатом на статичные карты и защитой от undefined.
   const videoSrc = current.video_url || GAME_VIDEO[current.id] || ''
   const casesHref = current.file_url || GAME_FILE[current.id] || ''
-  const fileName = casesHref ? (casesHref.split('/').pop() ?? 'кейсы.xlsx') : 'кейсы.xlsx'
+  const fileName = casesHref ? basename(casesHref, 'кейсы.xlsx') : 'кейсы.xlsx'
 
   return (
     <div className="space-y-6">
@@ -337,7 +346,7 @@ export default function TeamCabinet() {
                       <h3 className="truncate text-base font-bold">{c.title}</h3>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      <Badge style={{ background: DIFF_BADGE[c.difficulty].bg, color: DIFF_BADGE[c.difficulty].fg }}>
+                      <Badge style={{ background: diffBadge(c.difficulty).bg, color: diffBadge(c.difficulty).fg }}>
                         {c.difficulty}
                       </Badge>
                       <ChevronDown size={18} className={`text-ink-soft transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -405,7 +414,8 @@ export default function TeamCabinet() {
                   </label>
                   <button
                     onClick={sendAnswer}
-                    disabled={sending}
+                    disabled={sending || !canSubmit}
+                    title={!canSubmit ? 'Впишите ответ или прикрепите файл' : undefined}
                     className="btn-alfa ml-auto flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-bold disabled:opacity-60"
                   >
                     {sending
@@ -473,18 +483,18 @@ export default function TeamCabinet() {
               </span>
             </div>
             <ul className="space-y-1.5">
-              {roster.map((p, i) => (
-                <li key={p + i} className="group flex items-center gap-2.5 rounded-xl px-2 py-1 sf-hoversoft">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full sf-2 text-xs font-bold">{p.slice(0, 1)}</span>
-                  <span className="flex-1 text-sm font-semibold">{p}</span>
-                  {i === 0 ? (
+              {roster.map((p) => (
+                <li key={p.id} className="group flex items-center gap-2.5 rounded-xl px-2 py-1 sf-hoversoft">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full sf-2 text-xs font-bold">{p.name.slice(0, 1)}</span>
+                  <span className="flex-1 text-sm font-semibold">{p.name}</span>
+                  {p.isCaptain ? (
                     <span className="grid h-9 w-9 place-items-center" title="Капитан">
                       <Crown size={16} style={{ color: 'var(--color-gold)' }} />
                     </span>
                   ) : (
                     <button
                       onClick={() => removePlayer(p)}
-                      aria-label={`Убрать игрока ${p}`}
+                      aria-label={`Убрать игрока ${p.name}`}
                       title="Убрать игрока"
                       className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa focus-visible:bg-alfa/10 focus-visible:text-alfa"
                     >

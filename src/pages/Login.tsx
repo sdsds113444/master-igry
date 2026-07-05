@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowRight, KeyRound, Loader2, Sparkles } from 'lucide-react'
 import Background from '../components/Background'
 import ThemeToggle from '../components/ThemeToggle'
-import { getSession, signInByCode, normalizeCode, TooManyAttemptsError } from '../lib/db'
+import { getSession, signInByCode, normalizeCode, TooManyAttemptsError, MOCK_ADMIN_CODE } from '../lib/db'
 import { isSupabaseConfigured } from '../lib/supabase'
 
 export default function Login() {
@@ -33,7 +33,9 @@ export default function Login() {
         setError('Код не найден. Проверьте и попробуйте ещё раз.')
         return
       }
-      navigate(session.role === 'admin' ? '/admin' : '/board')
+      // replace: страница входа не должна оставаться в истории — иначе «назад» с доски
+      // отскакивает на «/», а тамошний useEffect тут же редиректит обратно.
+      navigate(session.role === 'admin' ? '/admin' : '/board', { replace: true })
     } catch (e) {
       if (e instanceof TooManyAttemptsError) {
         setError('Слишком много попыток. Подождите пару минут и попробуйте снова.')
@@ -141,7 +143,7 @@ export default function Login() {
           <p className="mt-5 rounded-xl sf-1 px-3 py-2 text-center text-xs text-ink-soft">
             {isSupabaseConfigured
               ? <>Код команды выдаёт организатор. Нет кода — напишите тренеру.</>
-              : <>Демо-режим: любой код открывает доску, <b>DEMO-ADMIN</b> — админку.</>}
+              : <>Демо-режим: любой код открывает доску, <b>{MOCK_ADMIN_CODE}</b> — админку.</>}
           </p>
         </div>
       </div>

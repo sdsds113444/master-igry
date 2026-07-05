@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Loader2, Send, CheckCircle2, Bug, HelpCircle, Lightbulb } from 'lucide-react'
 import Dialog from './Dialog'
 import { submitFeedback, type FeedbackCategory } from '../lib/db'
@@ -25,9 +25,13 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
     setCategory('bug'); setDid(''); setExpected(''); setGot(''); setDevice('')
     setSending(false); setSent(false); setError('')
   }
+  // Сбрасываем форму при КАЖДОМ открытии, а не отложенным setTimeout после закрытия:
+  // тот таймер никто не отменял — он мог стереть ввод в заново открытой модалке
+  // (если её открыли снова в пределах 300 мс) и стрелял после размонтирования.
+  useEffect(() => { if (open) reset() }, [open])
+
   function close() {
     onClose()
-    setTimeout(reset, 300) // после анимации закрытия
   }
 
   async function send(e: React.FormEvent) {

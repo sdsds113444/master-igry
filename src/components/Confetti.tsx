@@ -43,7 +43,7 @@ export default function Confetti({ count = 36 }: { count?: number }) {
       {pieces.map((p) => (
         <motion.span
           key={p.id}
-          className="absolute top-0"
+          className="absolute"
           style={{
             left: `${p.left}%`,
             width: p.size,
@@ -51,9 +51,12 @@ export default function Confetti({ count = 36 }: { count?: number }) {
             background: p.color,
             borderRadius: p.rounded ? '999px' : '2px',
           }}
-          initial={{ y: '-10%', x: 0, opacity: 0, rotate: 0 }}
+          // Анимируем top (в процентах он считается от высоты КОНТЕЙНЕРА), а не y:
+          // у framer-motion y — это translateY, где проценты берутся от высоты самой
+          // частицы (~4–7px), из-за чего «конфетти» сдвигалось на пиксели и не падало.
+          initial={{ top: '-8%', x: 0, opacity: 0, rotate: 0 }}
           animate={{
-            y: '120%',
+            top: '112%',
             x: p.drift,
             opacity: [0, 1, 1, 0],
             rotate: p.spin,

@@ -4,8 +4,8 @@ import { Link } from 'react-router-dom'
 import { Trophy, Crown, Flame, Lock, Check, Play, ArrowRight, Medal, Clapperboard, Newspaper } from 'lucide-react'
 import { GAME_VIDEO, START_VIDEO, type Game } from '../data/mock'
 import {
-  getMyTeam, listTeamsRating, getGames, listFeed, pickCurrentGame,
-  type RatingRow, type TeamInfo, type FeedRow,
+  getSession, listTeamsRating, getGames, listFeed, pickCurrentGame,
+  type RatingRow, type FeedRow,
 } from '../lib/db'
 import { heroStars as heroStarsOf, fadeUp, teamAvatar } from '../lib/ui'
 import Stars from '../components/Stars'
@@ -14,6 +14,7 @@ import Badge from '../components/Badge'
 import Tilt from '../components/Tilt'
 import Confetti from '../components/Confetti'
 import CountUp from '../components/CountUp'
+import ErrorCard from '../components/ErrorCard'
 
 // Тематические образы КОЯ по играм — кадры выдернуты прямо из мультиков этих игр
 // (video/МУЛЬТ 5/7/8.mp4 через ffmpeg). Нет образа → градиент+эмодзи.
@@ -36,7 +37,9 @@ const GAME_IMAGE_POSITION: Record<string, string> = {
 
 export default function Board() {
   const [rating, setRating] = useState<RatingRow[] | null>(null)
-  const [myTeam, setMyTeam] = useState<TeamInfo | null>(null)
+  // Нужен только id своей команды (для подсветки строки и карточки героя) — берём его
+  // из локальной сессии, а не отдельным запросом getMyTeam(): все данные уже в rating.
+  const myTeamId = getSession()?.teamId ?? null
   const [games, setGames] = useState<Game[] | null>(null)
   const [feed, setFeed] = useState<FeedRow[] | null>(null)
   const [video, setVideo] = useState<{ title: string; src: string } | null>(null)
@@ -46,11 +49,11 @@ export default function Board() {
     let cancelled = false
     async function load() {
       try {
-        const [r, mt, gs, fd] = await Promise.all([
-          listTeamsRating(), getMyTeam(), getGames(), listFeed(),
+        const [r, gs, fd] = await Promise.all([
+          listTeamsRating(), getGames(), listFeed(),
         ])
         if (cancelled) return
-        setRating(r); setMyTeam(mt); setGames(gs); setFeed(fd)
+        setRating(r); setGames(gs); setFeed(fd)
       } catch {
         if (!cancelled) setError(true)
       }
@@ -62,11 +65,20 @@ export default function Board() {
   // Тихо обновляем рейтинг/игры/ленту: при возврате на вкладку и по таймеру раз в 4 минуты —
   // чтобы уже открытая доска подхватывала новые баллы после сохранения в админке без перезагрузки.
   useEffect(() => {
-    function refresh() {
-      if (document.visibilityState !== 'visible') return
-      Promise.all([listTeamsRating(), getGames(), listFeed()])
-        .then(([r, gs, fd]) => { setRating(r); setGames(gs); setFeed(fd) })
-        .catch(() => { /* тихо: это фоновое обновление, не первичная загрузка */ })
+    let refreshing = false // focus и visibilitychange на возврате вкладки летят почти
+                           // одновременно — не запускаем два параллельных обновления.
+    async function refresh() {
+      if (document.visibilityState !== 'visible' || refreshing) return
+      refreshing = true
+      try {
+        const [r, gs, fd] = await Promise.all([listTeamsRating(), getGames(), listFeed()])
+        setRating(r); setGames(gs); setFeed(fd)
+        setError(false) // сеть восстановилась — гасим экран ошибки первичной загрузки
+      } catch {
+        /* тихо: это фоновое обновление, не первичная загрузка */
+      } finally {
+        refreshing = false
+      }
     }
     window.addEventListener('focus', refresh)
     document.addEventListener('visibilitychange', refresh)
@@ -78,21 +90,13 @@ export default function Board() {
     }
   }, [])
 
-  const myRating = rating?.find((r) => r.id === myTeam?.id)
+  const myRating = rating?.find((r) => r.id === myTeamId)
   const myRank = myRating?.rank ?? 1
   const heroStars = heroStarsOf(myRank) // 3..5
   const inPrizes = !!myRating && myRating.rank <= 3 // призовая тройка → залп конфетти
 
   if (error) {
-    return (
-      <div className="glass rounded-glass p-8 text-center">
-        <p className="font-display text-lg font-bold">Не удалось загрузить доску</p>
-        <p className="mt-1 text-sm text-ink-soft">Проверьте соединение и обновите страницу.</p>
-        <button onClick={() => window.location.reload()} className="btn-alfa mt-4 rounded-2xl px-5 py-2.5 text-sm font-bold">
-          Обновить
-        </button>
-      </div>
-    )
+    return <ErrorCard title="Не удалось загрузить доску" />
   }
 
   if (!rating || !games || !feed) {
@@ -119,6 +123,10 @@ export default function Board() {
 
   const doneCount = games.filter((g) => g.status === 'done').length
   const currentGame = pickCurrentGame(games)
+  // Пустой список игр (БД не настроена) — не роняем страницу обращением к .week/.id.
+  if (!currentGame) {
+    return <ErrorCard title="Игры сезона ещё не настроены" hint="Загляните позже — задания скоро появятся." />
+  }
 
   return (
     <div className="space-y-6">
@@ -211,7 +219,10 @@ export default function Board() {
                   // Линейное угасание по всей высоте левого края (не радиальная виньетка —
                   // та тает только по углам и оставляет шов посередине высоты).
                   maskImage: 'linear-gradient(to right, transparent 0%, black 24%)',
-                  WebkitMaskImage: '-webkit-linear-gradient(to right, transparent 0%, black 24%)',
+                  // Стандартный синтаксис и в -webkit-варианте: легаси
+                  // -webkit-linear-gradient не принимает «to right» → значение было
+                  // невалидным и маска отбрасывалась (жёсткий шов в старых WebView).
+                  WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 24%)',
                 }}
               />
               {/* падающие коечки */}
@@ -227,7 +238,7 @@ export default function Board() {
                   {emoji}
                 </span>
               ))}
-              {myTeam && (
+              {myTeamId && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9, y: 10 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -398,7 +409,7 @@ export default function Board() {
           </h2>
           <div className="glass-strong rounded-3xl p-3">
             {rating.slice(0, 8).map((t) => (
-              <RatingRowView key={t.id} rank={t.rank} name={t.name} site={t.site} total={t.total} hue={t.hue} me={t.id === myTeam?.id} />
+              <RatingRowView key={t.id} rank={t.rank} name={t.name} site={t.site} total={t.total} hue={t.hue} me={t.id === myTeamId} />
             ))}
 
             {myRating && myRating.rank > 8 && (

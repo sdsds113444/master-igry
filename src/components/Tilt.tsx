@@ -35,16 +35,33 @@ export default function Tilt({
   // Гироскоп (моб): gamma — наклон влево/вправо, beta — вперёд/назад. Держим телефон
   // под ~45° как «ноль», делим на 45° и зажимаем в -0.5..0.5. iOS без разрешения
   // событие не шлёт — тогда просто нет наклона, ничего не ломается.
+  // Слушаем ТОЛЬКО пока элемент в зоне видимости: иначе deviceorientation дёргал бы
+  // спринги, даже когда баннер прокручен за экран.
   useEffect(() => {
     if (reduce) return
+    const el = ref.current
+    if (!el) return
+    let listening = false
     function onOrient(e: DeviceOrientationEvent) {
       const g = e.gamma ?? 0
       const b = (e.beta ?? 0) - 45
       px.set(Math.max(-0.5, Math.min(0.5, g / 45)))
       py.set(Math.max(-0.5, Math.min(0.5, b / 45)))
     }
-    window.addEventListener('deviceorientation', onOrient)
-    return () => window.removeEventListener('deviceorientation', onOrient)
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && !listening) {
+        window.addEventListener('deviceorientation', onOrient)
+        listening = true
+      } else if (!entry.isIntersecting && listening) {
+        window.removeEventListener('deviceorientation', onOrient)
+        listening = false
+      }
+    })
+    io.observe(el)
+    return () => {
+      io.disconnect()
+      if (listening) window.removeEventListener('deviceorientation', onOrient)
+    }
   }, [reduce, px, py])
 
   if (reduce) {

@@ -9,6 +9,13 @@ import { useEffect, useRef } from 'react'
 export function useDialogA11y(open: boolean, onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null)
 
+  // onClose у потребителей — новая функция на каждый рендер. Держим её в ref, чтобы
+  // НЕ включать в deps эффекта: иначе любой ре-рендер родителя (напр. ввод символа в
+  // форме отзыва) перезапускал бы эффект, а тот при setup крадёт фокус на первую
+  // кнопку («X») — фокус вырывался бы из поля ввода после каждого нажатия клавиши.
+  const onCloseRef = useRef(onClose)
+  useEffect(() => { onCloseRef.current = onClose })
+
   useEffect(() => {
     if (!open) return
     const node = ref.current
@@ -32,7 +39,7 @@ export function useDialogA11y(open: boolean, onClose: () => void) {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         e.preventDefault()
-        onClose()
+        onCloseRef.current()
         return
       }
       if (e.key === 'Tab') {
@@ -59,7 +66,7 @@ export function useDialogA11y(open: boolean, onClose: () => void) {
       document.body.style.overflow = prevOverflow
       prevActive?.focus?.()
     }
-  }, [open, onClose])
+  }, [open])
 
   return ref
 }

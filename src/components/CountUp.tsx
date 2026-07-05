@@ -20,20 +20,22 @@ export default function CountUp({
 }) {
   const reduce = useReducedMotion()
   const [display, setDisplay] = useState(reduce ? value : 0)
-  const prev = useRef(reduce ? value : 0)
+  // Фактически показанное число (а не прошлая ЦЕЛЬ): если value меняется, пока
+  // анимация ещё идёт (фоновое обновление рейтинга), старт с текущего display даёт
+  // плавный докрут, а не видимый скачок «промежуточное → старая цель → новая цель».
+  const shown = useRef(reduce ? value : 0)
 
   useEffect(() => {
     if (reduce) {
       setDisplay(value)
-      prev.current = value
+      shown.current = value
       return
     }
-    const controls = animate(prev.current, value, {
+    const controls = animate(shown.current, value, {
       duration,
       ease: [0.22, 1, 0.36, 1],
-      onUpdate: (v) => setDisplay(v),
+      onUpdate: (v) => { shown.current = v; setDisplay(v) },
     })
-    prev.current = value
     return () => controls.stop()
   }, [value, duration, reduce])
 

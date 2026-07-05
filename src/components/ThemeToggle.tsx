@@ -11,18 +11,28 @@ function isDarkNow(): boolean {
 export default function ThemeToggle({ className = '' }: { className?: string }) {
   const [dark, setDark] = useState(isDarkNow)
 
+  // Только применяем класс. В localStorage НЕ пишем в эффекте — иначе при первом
+  // визите системная тема сразу сохранялась бы как «выбор пользователя», и
+  // public/theme.js навсегда игнорировал бы смену системной темы. Запись — по клику.
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark)
-    try {
-      localStorage.setItem('theme', dark ? 'dark' : 'light')
-    } catch {
-      /* localStorage может быть недоступен — не критично */
-    }
   }, [dark])
+
+  function toggle() {
+    setDark((d) => {
+      const next = !d
+      try {
+        localStorage.setItem('theme', next ? 'dark' : 'light')
+      } catch {
+        /* localStorage может быть недоступен — не критично */
+      }
+      return next
+    })
+  }
 
   return (
     <button
-      onClick={() => setDark((d) => !d)}
+      onClick={toggle}
       aria-label={dark ? 'Включить светлую тему' : 'Включить тёмную тему'}
       title={dark ? 'Светлая тема' : 'Тёмная тема'}
       className={`tap grid h-10 w-10 place-items-center rounded-full sf-1 text-ink-soft transition-colors sf-hover hover:text-alfa ${className}`}
