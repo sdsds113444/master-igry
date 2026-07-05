@@ -21,7 +21,7 @@ export interface Game {
 }
 
 export interface TeamScore {
-  cases: number // очки за кейсы (0–30)
+  cases: number // общая оценка за кейсы (0–3)
   bonus: number // +1 за нестандарт
   superBonus: number // +3 за лучший FCR недели
   fcr: number // % FCR
@@ -138,7 +138,8 @@ export const TEAMS: Team[] = NAMES.map((name, i) => {
       perGame[g.id] = { cases: 0, bonus: 0, superBonus: 0, fcr: 0, vok: 0, superBonusVok: 0 }
       continue
     }
-    const cases = Math.round((18 + seeded(i, g.num + 2) * 12) * strength) // до ~30
+    // Общий балл за кейсы 0..3: сильнее команда (strength) → выше балл, плюс лёгкий разброс.
+    const cases = Math.min(3, Math.max(0, Math.round(strength * 3 + (seeded(i, g.num + 2) - 0.5))))
     const bonus = seeded(i, g.num + 5) > 0.7 ? 1 : 0
     const superBonus = seeded(i, g.num + 9) > 0.86 ? 3 : 0
     const fcr = Math.round(70 + seeded(i, g.num + 11) * 26)

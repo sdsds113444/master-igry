@@ -3,6 +3,9 @@ import { BookOpen, Gift } from 'lucide-react'
 import { RULES, PRIZES, PRIZES_NOTE } from '../data/mock'
 import { fadeUp } from '../lib/ui'
 import Badge from '../components/Badge'
+import Icon3D, { EMOJI_ICON_3D, type Icon3DName } from '../components/Icon3D'
+
+const PRIZE_ICON_NAMES: Icon3DName[] = ['trophy', 'prizeMerch', 'coin']
 
 export default function Rules() {
   return (
@@ -44,8 +47,8 @@ export default function Rules() {
               animate="show"
               className="glass lift flex gap-3 rounded-3xl p-4"
             >
-              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl sf-2 text-2xl" aria-hidden="true">
-                {r.icon}
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl sf-2" aria-hidden="true">
+                <Icon3D name={EMOJI_ICON_3D[r.icon]} fallback={r.icon} className="h-10 w-10 object-contain drop-shadow-sm" />
               </span>
               <div>
                 <h3 className="text-base font-bold">{r.title}</h3>
@@ -71,7 +74,7 @@ export default function Rules() {
               style={{ boxShadow: `0 14px 40px -18px ${p.accent}` }}
             >
               <div className="flex items-center gap-2">
-                <span className="text-3xl" aria-hidden="true">{p.emoji}</span>
+                <Icon3D name={PRIZE_ICON_NAMES[i] ?? EMOJI_ICON_3D[p.emoji]} fallback={p.emoji} className="h-12 w-12 shrink-0 object-contain drop-shadow-md" />
                 <Badge style={{ background: p.chipBg, color: p.chipFg }}>{p.place}</Badge>
               </div>
               <h3 className="mt-3 font-display text-lg font-bold leading-tight">{p.title}</h3>

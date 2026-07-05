@@ -71,7 +71,7 @@ create table if not exists public.cases (
 create table if not exists public.scores (
   team_id         uuid not null references public.teams(id) on delete cascade,
   game_id         text not null references public.games(id) on delete cascade,
-  cases           int  default 0 check (cases between 0 and 30),
+  cases           int  default 0 check (cases between 0 and 3),  -- общий балл за кейсы 0..3 (решение созвона)
   bonus           int  default 0 check (bonus in (0,1)),
   super_bonus     int  default 0 check (super_bonus in (0,3)),      -- +3 за лучший FCR недели
   fcr             int  default 0 check (fcr between 0 and 100),

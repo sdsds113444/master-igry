@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { Trophy, Crown, Flame, Lock, Check, Play, ArrowRight, Medal, Clapperboard, Newspaper } from 'lucide-react'
+import { Trophy, Flame, Lock, Check, Play, ArrowRight, Clapperboard, Newspaper } from 'lucide-react'
 import { GAME_VIDEO, START_VIDEO, type Game } from '../data/mock'
 import {
   getSession, listTeamsRating, getGames, listFeed, pickCurrentGame,
@@ -14,6 +14,7 @@ import Tilt from '../components/Tilt'
 import Confetti from '../components/Confetti'
 import CountUp from '../components/CountUp'
 import ErrorCard from '../components/ErrorCard'
+import Icon3D, { EMOJI_ICON_3D, FEED_ICON_3D, GAME_ICON_3D, type Icon3DName } from '../components/Icon3D'
 
 // Тематические образы КОЯ по играм — кадры выдернуты прямо из мультиков этих игр
 // (video/МУЛЬТ 5/7/8.mp4 через ffmpeg). Нет образа → градиент+эмодзи.
@@ -33,6 +34,15 @@ const GAME_IMAGE_POSITION: Record<string, string> = {
   captains: 'center 22%', // КОЯ в блестящем пиджаке с микрофоном
   marathon: 'center 30%', // КОЯ с финишным флагом и конфетти
 }
+
+const DROP_ICONS: Icon3DName[] = [
+  'coin',
+  'trophy',
+  'star',
+  'coin',
+  'trophy',
+  'star',
+]
 
 export default function Board() {
   const [rating, setRating] = useState<RatingRow[] | null>(null)
@@ -224,17 +234,16 @@ export default function Board() {
                 }}
               />
               {/* падающие коечки */}
-              {['🪙', '⭐', '🐾', '🪙', '⭐', '🐾'].map((emoji, i) => (
-                <span
+              {DROP_ICONS.map((name, i) => (
+                <Icon3D
                   key={`koya-drop-${i}`}
-                  className="pointer-events-none absolute top-0 text-2xl"
+                  name={name}
+                  className="pointer-events-none absolute top-0 h-8 w-8 object-contain drop-shadow-lg"
                   style={{
                     left: `${12 + i * 14}%`,
                     animation: `koya-drop ${5 + (i % 3)}s linear ${i * 0.9}s infinite`,
                   }}
-                >
-                  {emoji}
-                </span>
+                />
               ))}
               {myTeamId && (() => {
                 const tier = rankTier(myRank)
@@ -257,7 +266,7 @@ export default function Board() {
                       <span className="text-xs font-bold text-white/80">из 30</span>
                     </div>
                     <div className="mt-1.5 flex items-center gap-1.5 text-xs font-bold text-white/90">
-                      <span>{tier.emoji}</span> {tier.label}
+                      <Icon3D name={EMOJI_ICON_3D[tier.emoji]} fallback={tier.emoji} className="h-5 w-5 object-contain drop-shadow-sm" /> {tier.label}
                     </div>
                     <div className="mt-1.5 h-1.5 w-28 overflow-hidden rounded-full bg-white/20">
                       <motion.div
@@ -329,12 +338,12 @@ export default function Board() {
                       style={{ background: `${g.accent}40` }}
                     />
                     <div className="absolute inset-0 grid place-items-center">
-                      <span
-                        className="text-6xl"
+                      <Icon3D
+                        name={GAME_ICON_3D[g.id]}
+                        fallback={g.emoji}
+                        className="h-20 w-20 object-contain"
                         style={{ filter: `drop-shadow(0 6px 10px ${g.accent}70)` }}
-                      >
-                        {g.emoji}
-                      </span>
+                      />
                     </div>
                   </div>
                 )}
@@ -395,7 +404,7 @@ export default function Board() {
                 className={`glass lift flex gap-3 rounded-3xl p-4 ${interactive ? 'cursor-pointer' : ''}`}
               >
                 <span className="relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl sf-2 text-2xl">
-                  {f.emoji}
+                  <Icon3D name={FEED_ICON_3D[f.kind] ?? EMOJI_ICON_3D[f.emoji]} fallback={f.emoji} className="h-10 w-10 object-contain drop-shadow-sm" />
                   {f.kind === 'video' && (
                     <span className="btn-alfa absolute -bottom-1.5 -right-1.5 grid h-6 w-6 place-items-center rounded-full">
                       <Play size={12} fill="currentColor" />
@@ -464,7 +473,6 @@ function RatingRowView({
   rank, name, site, total, hue, me,
 }: { rank: number; name: string; site: string; total: number; hue: number; me?: boolean }) {
   const medal = rank <= 3
-  const medalColor = ['var(--color-gold)', 'var(--color-silver)', 'var(--color-bronze)'][rank - 1]
   return (
     <div
       className={`flex items-center gap-3 rounded-2xl px-3 py-2.5 ${
@@ -473,7 +481,7 @@ function RatingRowView({
     >
       <div className="grid w-7 shrink-0 place-items-center">
         {medal ? (
-          rank === 1 ? <Crown size={20} style={{ color: medalColor }} /> : <Medal size={18} style={{ color: medalColor }} />
+          <Icon3D name={rank === 1 ? 'trophy' : 'medalSilver'} className="h-6 w-6 object-contain drop-shadow-sm" />
         ) : (
           <span className="text-sm font-bold text-ink-soft">{rank}</span>
         )}

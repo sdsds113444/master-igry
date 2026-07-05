@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Play, FileDown, Upload, Send, MessageCircle, Crown, CheckCircle2, Clock, Star,
-  UserPlus, X, MessageSquare, Loader2, Pencil, Coins, ChevronDown,
+  Play, FileDown, Upload, Send, MessageCircle, CheckCircle2, Clock,
+  UserPlus, X, MessageSquare, Loader2, Pencil, ChevronDown,
 } from 'lucide-react'
 import {
   GAME_VIDEO, GAME_FILE,
@@ -20,6 +20,7 @@ import MentorChatModal from '../components/MentorChatModal'
 import ChatThread from '../components/ChatThread'
 import Badge from '../components/Badge'
 import ErrorCard from '../components/ErrorCard'
+import Icon3D, { EMOJI_ICON_3D, GAME_ICON_3D } from '../components/Icon3D'
 
 export default function TeamCabinet() {
   const [me, setMe] = useState<TeamInfo | null>(null)
@@ -238,7 +239,7 @@ export default function TeamCabinet() {
           <Stat label="Место" value={`#${rank}`} />
           <Stat label="Очки" value={total} />
           <Stat
-            label={<span className="inline-flex items-center gap-1"><Coins size={11} style={{ color: 'var(--color-gold)' }} /> Койны</span>}
+            label={<span className="inline-flex items-center gap-1"><Icon3D name="coin" className="h-4 w-4 object-contain" /> Койны</span>}
             value={me.coins}
           />
         </div>
@@ -465,7 +466,7 @@ export default function TeamCabinet() {
                   #{rank}
                 </div>
                 <div className="mt-1.5 flex items-center gap-1.5 text-sm font-bold" style={{ color: tier.color }}>
-                  <span>{tier.emoji}</span> {tier.label}
+                  <Icon3D name={EMOJI_ICON_3D[tier.emoji]} fallback={tier.emoji} className="h-5 w-5 object-contain drop-shadow-sm" /> {tier.label}
                 </div>
                 <div className="mt-2 h-2 w-full max-w-[140px] overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
                   <div className="h-full rounded-full transition-[width]" style={{ width: `${rankProgress}%`, background: tier.color }} />
@@ -492,7 +493,7 @@ export default function TeamCabinet() {
                   <span className="flex-1 text-sm font-semibold">{p.name}</span>
                   {p.isCaptain ? (
                     <span className="grid h-9 w-9 place-items-center" title="Капитан">
-                      <Crown size={16} style={{ color: 'var(--color-gold)' }} />
+                      <Icon3D name="crown" className="h-7 w-7 object-contain drop-shadow-sm" />
                     </span>
                   ) : (
                     <button
@@ -544,7 +545,7 @@ export default function TeamCabinet() {
                 return (
                   <div key={g.id} className="rounded-2xl sf-1 p-3">
                     <div className="flex items-center gap-3">
-                      <span className="text-xl">{g.emoji}</span>
+                      <Icon3D name={GAME_ICON_3D[g.id]} fallback={g.emoji} className="h-8 w-8 shrink-0 object-contain drop-shadow-sm" />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-bold">{g.title}</div>
                         <div className="text-xs font-semibold text-ink-soft">
@@ -556,7 +557,7 @@ export default function TeamCabinet() {
                       </div>
                       <div className="flex items-center gap-1 text-base font-bold">
                         {sum > 0 ? sum : '—'}
-                        {(s.superBonus > 0 || superVok > 0) && <Star size={13} style={{ color: 'var(--color-gold)' }} fill="currentColor" />}
+                        {(s.superBonus > 0 || superVok > 0) && <Icon3D name="star" className="h-4 w-4 object-contain drop-shadow-sm" />}
                       </div>
                     </div>
                     {s.feedback && (

@@ -237,7 +237,7 @@ export default function Admin() {
         <div className="flex items-center justify-between border-b border-black/5 px-5 py-4">
           <h2 className="font-display text-xl font-bold">Оценивание команд</h2>
           <div className="text-xs font-semibold text-ink-soft">
-            Шкала: 0 — не сдал · 1 — &gt;3 ошибок · 2 — &lt;3 ошибок · 3 — без ошибок (за каждый кейс)
+            Оценка за кейсы (общая, 0–3): 0 — не сдал · 1 — &gt;3 ошибок · 2 — &lt;3 ошибок · 3 — без ошибок
           </div>
         </div>
 
@@ -536,10 +536,10 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
       </td>
       <td className="px-2 text-center">
         <input
-          type="number" min={0} max={30}
+          type="number" min={0} max={3}
           value={g.cases}
           disabled={!g.submitted}
-          onChange={(e) => onChange({ cases: clampNum(e.target.value, 30) })}
+          onChange={(e) => onChange({ cases: clampNum(e.target.value, 3) })}
           className="w-16 rounded-lg border border-black/10 sf-3 px-2 py-1 text-center font-bold outline-none focus:border-alfa/50 disabled:opacity-40"
         />
       </td>
@@ -648,10 +648,10 @@ const GradeCard = memo(function GradeCard({
         <label className="block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">Очки за кейсы</span>
           <input
-            type="number" min={0} max={30}
+            type="number" min={0} max={3}
             value={g.cases}
             disabled={!g.submitted}
-            onChange={(e) => onChange({ cases: clampNum(e.target.value, 30) })}
+            onChange={(e) => onChange({ cases: clampNum(e.target.value, 3) })}
             className={fieldCls}
           />
         </label>
