@@ -11,8 +11,12 @@ import {
 import {
   getMyTeam, listTeamsRating, getRoster, addPlayer as dbAddPlayer, removePlayer as dbRemovePlayer,
   getCases, getScores, getSubmission, submitAnswer, getGames, pickCurrentGame,
+  getMentorLatestFromTrainer, getMentorSeen, markMentorSeen,
   type TeamInfo, type RosterMember,
 } from '../lib/db'
+
+/** Максимум игроков в составе команды (фиксированный размер — честное начисление). */
+const ROSTER_LIMIT = 10
 import { rankTier, rankPercent, DEADLINE, diffBadge, teamAvatar, basename } from '../lib/ui'
 import { teamTotal } from '../lib/scoring'
 import VideoModal from '../components/VideoModal'
@@ -31,6 +35,7 @@ export default function TeamCabinet() {
 
   const [videoOpen, setVideoOpen] = useState(false)
   const [mentorChatOpen, setMentorChatOpen] = useState(false)
+  const [mentorUnread, setMentorUnread] = useState(false) // «пипочка»: новый ответ тренера
 
   const [games, setGames] = useState<Game[]>([])
   const [current, setCurrent] = useState<Game | null>(null)
@@ -95,6 +100,31 @@ export default function TeamCabinet() {
     return () => { cancelled = true }
   }, [])
 
+  // «Пипочка»: новый ответ тренера → красная точка на кнопке «Написать тренеру».
+  // Опрос раз в 15с + при возврате на вкладку (realtime-сокет на моб. сетях ненадёжен).
+  useEffect(() => {
+    if (!me) return
+    let stopped = false
+    async function check() {
+      if (document.visibilityState !== 'visible') return
+      try {
+        const latest = await getMentorLatestFromTrainer(me!.id)
+        if (!stopped) setMentorUnread(latest > getMentorSeen(me!.id))
+      } catch { /* тихо: фоновая проверка */ }
+    }
+    check()
+    const timer = window.setInterval(check, 15000)
+    window.addEventListener('focus', check)
+    return () => { stopped = true; window.clearInterval(timer); window.removeEventListener('focus', check) }
+  }, [me])
+
+  // Открыть чат с тренером: помечаем прочитанным и гасим точку.
+  function openMentorChat() {
+    if (me) markMentorSeen(me.id)
+    setMentorUnread(false)
+    setMentorChatOpen(true)
+  }
+
   const tier = rankTier(rank)
   const rankProgress = rankPercent(rank)
 
@@ -103,6 +133,10 @@ export default function TeamCabinet() {
     const name = newPlayer.trim()
     if (!name || !me) return
     setRosterError('')
+    if (roster.length >= ROSTER_LIMIT) {
+      setRosterError(`В команде максимум ${ROSTER_LIMIT} человек.`)
+      return
+    }
     // Оптимистично показываем с временным id, затем заменяем на строку из БД
     // (с настоящим id) — откат тоже по id, а не по имени, чтобы не задеть тёзку.
     const tempId = `tmp-${Date.now()}`
@@ -111,9 +145,12 @@ export default function TeamCabinet() {
     try {
       const created = await dbAddPlayer(me.id, name)
       setRoster((r) => r.map((p) => (p.id === tempId ? created : p)))
-    } catch {
+    } catch (err) {
       setRoster((r) => r.filter((p) => p.id !== tempId)) // откат оптимистичного добавления
-      setRosterError('Не удалось добавить игрока — попробуйте ещё раз.')
+      const full = String((err as { message?: string })?.message ?? '').includes('roster_full')
+      setRosterError(full
+        ? `В команде максимум ${ROSTER_LIMIT} человек.`
+        : 'Не удалось добавить игрока — попробуйте ещё раз.')
     }
   }
 
@@ -230,7 +267,7 @@ export default function TeamCabinet() {
             <span className="rounded-full sf-2 px-2.5 py-1 text-xs font-bold text-ink-soft">{me.code}</span>
           </div>
           <div className="mt-0.5 text-sm text-ink-soft">
-            {me.site} · тренер: <b>{me.mentor}</b>
+            {me.site}
           </div>
         </div>
         <div className="flex gap-3">
@@ -247,17 +284,23 @@ export default function TeamCabinet() {
             <MessageCircle size={16} /> Общий чат
           </a>
           <button
-            onClick={() => setMentorChatOpen(true)}
-            className="btn-alfa flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold"
+            onClick={openMentorChat}
+            className="btn-alfa relative flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold"
           >
             <Send size={16} /> Написать тренеру
+            {mentorUnread && (
+              <span
+                className="absolute -right-1.5 -top-1.5 h-3.5 w-3.5 rounded-full bg-alfa ring-2 ring-white"
+                aria-label="Новый ответ тренера"
+              />
+            )}
           </button>
         </div>
       </motion.div>
 
       <MentorChatModal
         open={mentorChatOpen}
-        onClose={() => setMentorChatOpen(false)}
+        onClose={() => { markMentorSeen(me.id); setMentorUnread(false); setMentorChatOpen(false) }}
         teamId={me.id}
         teamName={me.name}
       />
@@ -489,7 +532,7 @@ export default function TeamCabinet() {
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-display text-lg font-bold">Состав команды</h3>
               <span className="rounded-full sf-2 px-2.5 py-1 text-xs font-bold text-ink-soft">
-                {roster.length} чел
+                {roster.length} / {ROSTER_LIMIT}
               </span>
             </div>
             <ul className="space-y-1.5">
@@ -523,15 +566,24 @@ export default function TeamCabinet() {
               <input
                 value={newPlayer}
                 onChange={(e) => setNewPlayer(e.target.value)}
-                placeholder="Имя игрока…"
-                className="field flex-1 px-3 py-2 text-sm outline-none"
+                placeholder={roster.length >= ROSTER_LIMIT ? 'Состав заполнен' : 'Имя игрока…'}
+                disabled={roster.length >= ROSTER_LIMIT}
+                className="field flex-1 px-3 py-2 text-sm outline-none disabled:opacity-50"
               />
-              <button type="submit" className="btn-alfa flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold">
+              <button
+                type="submit"
+                disabled={roster.length >= ROSTER_LIMIT}
+                className="btn-alfa flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold disabled:opacity-50"
+              >
                 <UserPlus size={15} /> Добавить
               </button>
             </form>
             {rosterError && <p className="mt-2 text-xs font-semibold text-danger" role="alert">{rosterError}</p>}
-            <p className="mt-2 text-xs text-ink-soft">Капитан регистрирует состав команды.</p>
+            <p className="mt-2 text-xs text-ink-soft">
+              {roster.length >= ROSTER_LIMIT
+                ? `Набрано ${ROSTER_LIMIT} из ${ROSTER_LIMIT} — это максимум состава.`
+                : `Капитан регистрирует состав команды (до ${ROSTER_LIMIT} человек).`}
+            </p>
           </div>
 
           {/* Баллы + обратная связь тренера */}

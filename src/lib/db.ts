@@ -388,6 +388,53 @@ export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void, c
 }
 
 // =====================================================================
+// «ПИПОЧКА»: непрочитанные сообщения в чате «команда ↔ тренер»
+// =====================================================================
+// Read-state храним локально (per-device): при открытии чата запоминаем момент
+// «до сюда прочитано». Отдельной таблицы read-state нет — для боевого теста этого
+// достаточно (у тренеров всё равно одна общая учётка). Значения — эпоха в мс.
+const MENTOR_SEEN_PREFIX = 'mi.mentorSeen.'
+export function getMentorSeen(teamId: string): number {
+  const raw = localStorage.getItem(MENTOR_SEEN_PREFIX + teamId)
+  return raw ? new Date(raw).getTime() : 0
+}
+export function markMentorSeen(teamId: string): void {
+  localStorage.setItem(MENTOR_SEEN_PREFIX + teamId, new Date().toISOString())
+}
+
+/** Для тренера (админка): по каждой команде — время последнего сообщения ОТ КОМАНДЫ
+ *  в чате с тренером (channel='mentor', sender_role='player'). {} в демо-режиме.
+ *  Сравнивается с getMentorSeen(teamId) → «есть непрочитанное от команды». */
+export async function listMentorLatestFromTeams(): Promise<Record<string, number>> {
+  if (!isSupabaseConfigured) return {}
+  const sb = requireClient()
+  const { data, error } = await sb.from('messages')
+    .select('team_id, created_at')
+    .eq('channel', 'mentor').eq('sender_role', 'player')
+    .order('created_at', { ascending: false }).limit(500)
+  throwOn(error)
+  const out: Record<string, number> = {}
+  for (const r of data ?? []) {
+    const tid = r.team_id as string
+    if (!(tid in out)) out[tid] = new Date(r.created_at as string).getTime() // desc → первое = последнее
+  }
+  return out
+}
+
+/** Для команды: время последнего сообщения ОТ ТРЕНЕРА (sender_role='admin') в её
+ *  чате с тренером, или 0. Сравнивается с getMentorSeen(teamId). */
+export async function getMentorLatestFromTrainer(teamId: string): Promise<number> {
+  if (!isSupabaseConfigured) return 0
+  const sb = requireClient()
+  const { data, error } = await sb.from('messages')
+    .select('created_at')
+    .eq('team_id', teamId).eq('channel', 'mentor').eq('sender_role', 'admin')
+    .order('created_at', { ascending: false }).limit(1).maybeSingle()
+  if (error) return 0
+  return data?.created_at ? new Date(data.created_at as string).getTime() : 0
+}
+
+// =====================================================================
 // КЕЙСЫ ИГРЫ
 // =====================================================================
 export async function getCases(gameId: string): Promise<CaseItem[]> {

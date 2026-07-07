@@ -1,12 +1,32 @@
-import { memo, useCallback, useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Megaphone, RefreshCw, Check, Trophy, Loader2, MessageCircle, Bug, HelpCircle, Lightbulb, Eye, CheckCheck, FileText, Download } from 'lucide-react'
 import { type Game } from '../data/mock'
 import {
   listAllTeamsAdmin, getScoresForGame, gradeMany, getGames, publishGame, pickCurrentGame,
-  getAnswersForGame, getAnswerFileUrl,
+  getAnswersForGame, getAnswerFileUrl, listMentorLatestFromTeams, getMentorSeen, markMentorSeen,
   listFeedback, setFeedbackStatus, type AdminTeamRow, type FeedbackRow,
 } from '../lib/db'
+
+/** Короткий «пинг» через WebAudio (без ассета) — сигнал тренеру о новом сообщении.
+ *  Не критичен: браузер может блокировать звук до первого клика — глотаем ошибку. */
+function playPing() {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    if (!Ctx) return
+    const ctx = new Ctx()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain); gain.connect(ctx.destination)
+    osc.frequency.value = 880
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.01)
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35)
+    osc.start()
+    osc.stop(ctx.currentTime + 0.36)
+    osc.onended = () => ctx.close()
+  } catch { /* звук не критичен */ }
+}
 import MentorChatModal from '../components/MentorChatModal'
 import Dialog from '../components/Dialog'
 import ErrorCard from '../components/ErrorCard'
@@ -46,6 +66,10 @@ export default function Admin() {
   // Ответы команд по выбранной игре (текст + путь к файлу) — источник «сдал/не сдал» и просмотра.
   const [answers, setAnswers] = useState<Record<string, { answer: string; filePath: string | null }>>({})
   const [viewTeam, setViewTeam] = useState<AdminTeamRow | null>(null)
+  // «Пипочка»: по каждой команде — время последнего сообщения от неё в чате с тренером.
+  const [mentorLatest, setMentorLatest] = useState<Record<string, number>>({})
+  const [seenTick, setSeenTick] = useState(0) // форс-пересчёт непрочитанного после «прочитано»
+  const prevUnreadCount = useRef<number | null>(null)
 
   // Список игр (+ игра по умолчанию) и список команд грузим ОДИН раз: команды от
   // выбранной игры не зависят, ни к чему перезапрашивать их при каждом переключении.
@@ -103,6 +127,44 @@ export default function Admin() {
     load()
     return () => { cancelled = true }
   }, [gameId, teams])
+
+  // Опрос непрочитанных сообщений от команд (realtime ненадёжен на моб. сетях):
+  // раз в 15с + при возврате на вкладку. Звук — когда появилось НОВОЕ непрочитанное.
+  useEffect(() => {
+    let stopped = false
+    async function check() {
+      if (document.visibilityState !== 'visible') return
+      try {
+        const latest = await listMentorLatestFromTeams()
+        if (stopped) return
+        setMentorLatest(latest)
+        const count = Object.keys(latest).filter((tid) => latest[tid] > getMentorSeen(tid)).length
+        if (prevUnreadCount.current !== null && count > prevUnreadCount.current) playPing()
+        prevUnreadCount.current = count
+      } catch { /* тихо: фоновый опрос */ }
+    }
+    check()
+    const timer = window.setInterval(check, 15000)
+    window.addEventListener('focus', check)
+    return () => { stopped = true; window.clearInterval(timer); window.removeEventListener('focus', check) }
+  }, [])
+
+  // Множество команд с непрочитанными (seenTick форсит пересчёт после «прочитано»).
+  const mentorUnread = useMemo(() => {
+    const s = new Set<string>()
+    for (const tid of Object.keys(mentorLatest)) {
+      if (mentorLatest[tid] > getMentorSeen(tid)) s.add(tid)
+    }
+    return s
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mentorLatest, seenTick])
+
+  // Открыть чат с командой: помечаем прочитанным, гасим точку.
+  const openTeamChat = useCallback((t: AdminTeamRow) => {
+    markMentorSeen(t.id)
+    setSeenTick((n) => n + 1)
+    setChatTeam(t)
+  }, [])
 
   const submittedCount = Object.values(grades).filter((g) => g.submitted).length
   const isPublished = games.find((g) => g.id === gameId)?.status === 'current'
@@ -190,6 +252,11 @@ export default function Admin() {
           <h1 className="font-display text-2xl font-extrabold">Панель организатора</h1>
           <p className="text-sm text-ink-soft">Выкладывайте задания, принимайте ответы, ставьте баллы.</p>
         </div>
+        {mentorUnread.size > 0 && (
+          <div className="flex items-center gap-2 rounded-2xl bg-alfa/10 px-4 py-2 text-sm font-bold text-alfa-ink">
+            <MessageCircle size={16} /> Новых сообщений от команд: {mentorUnread.size}
+          </div>
+        )}
         <div className="rounded-2xl sf-1 px-4 py-2 text-center">
           <div className="font-display text-xl font-bold">{submittedCount}/{teams.length || 30}</div>
           <div className="text-xs font-semibold text-ink-soft">сдали ответ</div>
@@ -264,8 +331,9 @@ export default function Admin() {
                     t={t}
                     g={grades[t.id]}
                     hasAnswer={!!answers[t.id]}
+                    unread={mentorUnread.has(t.id)}
                     onUpd={upd}
-                    onChat={setChatTeam}
+                    onChat={openTeamChat}
                     onView={setViewTeam}
                   />
                 ))}
@@ -281,8 +349,9 @@ export default function Admin() {
                 t={t}
                 g={grades[t.id]}
                 hasAnswer={!!answers[t.id]}
+                unread={mentorUnread.has(t.id)}
                 onUpd={upd}
-                onChat={setChatTeam}
+                onChat={openTeamChat}
                 onView={setViewTeam}
               />
             ))}
@@ -314,7 +383,7 @@ export default function Admin() {
 
       <MentorChatModal
         open={!!chatTeam}
-        onClose={() => setChatTeam(null)}
+        onClose={() => { if (chatTeam) { markMentorSeen(chatTeam.id); setSeenTick((n) => n + 1) } setChatTeam(null) }}
         teamId={chatTeam?.id ?? ''}
         teamName={chatTeam?.name ?? ''}
         asAdmin
@@ -479,11 +548,12 @@ function FeedbackPanel() {
  *  команда, чей grade изменился, а не все ~30 строк на каждый ввод символа. Опирается
  *  на СТАБИЛЬНЫЕ пропсы onUpd/onChat/onView (см. useCallback/setState в Admin). */
 const GradeRowDesktop = memo(function GradeRowDesktop({
-  t, g, hasAnswer, onUpd, onChat, onView,
+  t, g, hasAnswer, unread, onUpd, onChat, onView,
 }: {
   t: AdminTeamRow
   g: Grade
   hasAnswer: boolean
+  unread: boolean
   onUpd: (id: string, patch: Partial<Grade>) => void
   onChat: (t: AdminTeamRow) => void
   onView: (t: AdminTeamRow) => void
@@ -512,11 +582,12 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
           </button>
           <button
             onClick={() => onChat(t)}
-            aria-label={`Чат с командой ${t.name}`}
-            title="Чат с командой"
-            className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa"
+            aria-label={unread ? `Чат с командой ${t.name} — новое сообщение` : `Чат с командой ${t.name}`}
+            title={unread ? 'Новое сообщение от команды' : 'Чат с командой'}
+            className="tap relative grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa"
           >
             <MessageCircle size={16} />
+            {unread && <span className="absolute right-0.5 top-0.5 h-2.5 w-2.5 rounded-full bg-alfa ring-2 ring-white" />}
           </button>
         </div>
       </td>
@@ -568,11 +639,12 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
 
 /** Карточка оценивания одной команды для мобильной раскладки (замена строки таблицы). */
 const GradeCard = memo(function GradeCard({
-  t, g, hasAnswer, onUpd, onChat, onView,
+  t, g, hasAnswer, unread, onUpd, onChat, onView,
 }: {
   t: AdminTeamRow
   g: Grade
   hasAnswer: boolean
+  unread: boolean
   onUpd: (id: string, patch: Partial<Grade>) => void
   onChat: (t: AdminTeamRow) => void
   onView: (t: AdminTeamRow) => void
@@ -609,10 +681,11 @@ const GradeCard = memo(function GradeCard({
         </button>
         <button
           onClick={() => onChat(t)}
-          aria-label={`Чат с командой ${t.name}`}
-          className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa"
+          aria-label={unread ? `Чат с командой ${t.name} — новое сообщение` : `Чат с командой ${t.name}`}
+          className="tap relative grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa"
         >
           <MessageCircle size={16} />
+          {unread && <span className="absolute right-0.5 top-0.5 h-2.5 w-2.5 rounded-full bg-alfa ring-2 ring-white" />}
         </button>
       </div>
 

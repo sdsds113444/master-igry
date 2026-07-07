@@ -5,7 +5,7 @@ import { fadeUp } from '../lib/ui'
 import Badge from '../components/Badge'
 import Icon3D, { EMOJI_ICON_3D, type Icon3DName } from '../components/Icon3D'
 
-const PRIZE_ICON_NAMES: Icon3DName[] = ['trophy', 'prizeMerch']
+const PRIZE_ICON_NAMES: Icon3DName[] = ['trophy', 'prizeMerch', 'coin']
 
 export default function Rules() {
   return (
@@ -62,7 +62,7 @@ export default function Rules() {
       {/* Призы */}
       <section>
         <h2 className="mb-3 flex items-center gap-2 px-1 font-display text-xl font-bold"><Gift size={20} className="text-alfa" /> Призы сезона</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           {PRIZES.map((p, i) => (
             <motion.div
               key={p.place}
