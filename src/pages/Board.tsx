@@ -269,45 +269,47 @@ export default function Board() {
                   }}
                 />
               ))}
-              {myTeamId && (() => {
-                const tier = rankTier(myRank)
-                const percent = rankPercent(myRank)
-                return (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    transition={{ delay: 0.5, type: 'spring', stiffness: 120 }}
-                    className="glass-dark pointer-events-none absolute right-4 top-4 z-20 rounded-2xl px-4 py-3"
-                    style={{ transform: 'translateZ(40px)' }}
-                  >
-                    <div className="text-xs font-semibold uppercase tracking-wider text-white/70">
-                      Место в сезоне
-                    </div>
-                    <div className="mt-1 flex items-baseline gap-1.5">
-                      <span className="font-display text-2xl font-extrabold text-white">
-                        #<CountUp value={myRank} />
-                      </span>
-                      <span className="text-xs font-bold text-white/80">из 30</span>
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-1.5 text-xs font-bold text-white/90">
-                      <Icon3D name={EMOJI_ICON_3D[tier.emoji]} fallback={tier.emoji} className="h-5 w-5 object-contain drop-shadow-sm" /> {tier.label}
-                    </div>
-                    <div className="mt-1.5 h-1.5 w-28 overflow-hidden rounded-full bg-white/20">
-                      <motion.div
-                        className="h-full rounded-full"
-                        style={{ background: tier.color }}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${percent}%` }}
-                        transition={{ delay: 0.7, duration: 0.8 }}
-                      />
-                    </div>
-                  </motion.div>
-                )
-              })()}
             </div>
           </Tilt>
         </div>
       </motion.section>
+
+      {/* ==== МЕСТО В СЕЗОНЕ ==== вынесено в отдельную карточку, чтобы не перекрывать маскота */}
+      {myTeamId && myRating && (() => {
+        const tier = rankTier(myRank)
+        const percent = rankPercent(myRank)
+        return (
+          <motion.section
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="glass-strong flex flex-wrap items-center gap-x-6 gap-y-3 rounded-glass px-5 py-4"
+          >
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Место в сезоне</div>
+              <div className="mt-0.5 flex items-baseline gap-1.5">
+                <span className="font-display text-3xl font-extrabold">#<CountUp value={myRank} /></span>
+                <span className="text-sm font-bold text-ink-soft">из 30</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-sm font-bold" style={{ color: tier.color }}>
+              <Icon3D name={EMOJI_ICON_3D[tier.emoji]} fallback={tier.emoji} className="h-7 w-7 object-contain drop-shadow-sm" />
+              {tier.label}
+            </div>
+            <div className="ml-auto w-full sm:w-56">
+              <div className="h-2 overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{ background: tier.color }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${percent}%` }}
+                  transition={{ delay: 0.5, duration: 0.8 }}
+                />
+              </div>
+            </div>
+          </motion.section>
+        )
+      })()}
 
       {/* ==== ЛЕНТА ИГР СЕЗОНА ==== */}
       <section>
