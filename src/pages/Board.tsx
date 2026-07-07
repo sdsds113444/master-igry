@@ -274,7 +274,7 @@ export default function Board() {
         </div>
       </motion.section>
 
-      {/* ==== МЕСТО В СЕЗОНЕ ==== вынесено в отдельную карточку, чтобы не перекрывать маскота */}
+      {/* ==== МЕСТО В СЕЗОНЕ ==== отдельная компактная карточка (не перекрывает маскота) */}
       {myTeamId && myRating && (() => {
         const tier = rankTier(myRank)
         const percent = rankPercent(myRank)
@@ -283,21 +283,26 @@ export default function Board() {
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="glass-strong flex flex-wrap items-center gap-x-6 gap-y-3 rounded-glass px-5 py-4"
+            className="glass-strong flex w-fit max-w-full flex-wrap items-center gap-x-5 gap-y-3 rounded-glass px-5 py-4"
           >
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Место в сезоне</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Место в сезоне</div>
               <div className="mt-0.5 flex items-baseline gap-1.5">
-                <span className="font-display text-3xl font-extrabold">#<CountUp value={myRank} /></span>
+                <span className="font-display text-3xl font-extrabold leading-none">#<CountUp value={myRank} /></span>
                 <span className="text-sm font-bold text-ink-soft">из 30</span>
               </div>
             </div>
+            <div className="hidden h-10 w-px bg-black/10 dark:bg-white/15 sm:block" />
             <div className="flex items-center gap-2 text-sm font-bold" style={{ color: tier.color }}>
               <Icon3D name={EMOJI_ICON_3D[tier.emoji]} fallback={tier.emoji} className="h-7 w-7 object-contain drop-shadow-sm" />
               {tier.label}
             </div>
-            <div className="ml-auto w-full sm:w-56">
-              <div className="h-2 overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
+            <div className="w-40">
+              <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-ink-soft">
+                <span>Путь к вершине</span>
+                <span>{percent}%</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
                 <motion.div
                   className="h-full rounded-full"
                   style={{ background: tier.color }}
