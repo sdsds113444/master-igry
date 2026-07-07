@@ -23,7 +23,7 @@ export interface AdminTeamRow { id: string; code: string; name: string; site: st
 /** Игрок состава. id — ключ строки в БД: операции идут по нему, а не по имени
  *  (иначе полные тёзки в команде удалялись/ломались пачкой). */
 export interface RosterMember { id: string; name: string; isCaptain: boolean }
-export interface GradeRow { cases: number; bonus: number; superBonus: number; vok: number; superBonusVok: number; feedback: string }
+export interface GradeRow { cases: number; bonus: number; vok: number; superBonusVok: number; feedback: string }
 
 // Демо-код админки ТОЛЬКО для офлайн-режима (моки, без реальных данных).
 // Боевой админ-код хранится в БД и НИКОГДА не попадает в репозиторий/бандл.
@@ -418,7 +418,6 @@ function mapScoreRow(r: Record<string, unknown>): GradeRow {
   return {
     cases: r.cases as number,
     bonus: r.bonus as number,
-    superBonus: r.super_bonus as number,
     vok: (r.vok as number) ?? 0,
     superBonusVok: (r.super_bonus_vok as number) ?? 0,
     feedback: (r.feedback as string) ?? '',
@@ -496,13 +495,15 @@ export async function getAnswerFileUrl(filePath: string): Promise<string | null>
   return data?.signedUrl ? toProxyUrl(data.signedUrl) : null
 }
 
-export interface GradeInput { teamId: string; gameId: string; cases: number; bonus: number; superBonus: number; vok: number; superBonusVok: number; feedback: string }
+export interface GradeInput { teamId: string; gameId: string; cases: number; bonus: number; vok: number; superBonusVok: number; feedback: string }
 
-/** Маппинг GradeInput → строка scores (общий для одиночного и пакетного сохранения). */
+/** Маппинг GradeInput → строка scores (общий для одиночного и пакетного сохранения).
+ *  super_bonus (историческое «за лучший FCR») больше не начисляется — колонку в БД
+ *  не пишем, она остаётся «дремлющей» (default 0) и на сумму рейтинга не влияет. */
 function gradeRow(i: GradeInput) {
   return {
     team_id: i.teamId, game_id: i.gameId,
-    cases: i.cases, bonus: i.bonus, super_bonus: i.superBonus,
+    cases: i.cases, bonus: i.bonus,
     vok: i.vok, super_bonus_vok: i.superBonusVok,
     feedback: i.feedback,
   }
@@ -548,7 +549,7 @@ export async function getScoresForGame(gameId: string): Promise<Record<string, G
     const out: Record<string, GradeRow> = {}
     for (const t of TEAMS) {
       const s = t.perGame[gameId]
-      if (s) out[t.id] = { cases: s.cases, bonus: s.bonus, superBonus: s.superBonus, vok: s.vok ?? 0, superBonusVok: s.superBonusVok ?? 0, feedback: s.feedback ?? '' }
+      if (s) out[t.id] = { cases: s.cases, bonus: s.bonus, vok: s.vok ?? 0, superBonusVok: s.superBonusVok ?? 0, feedback: s.feedback ?? '' }
     }
     return out
   }

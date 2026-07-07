@@ -11,7 +11,7 @@ import MentorChatModal from '../components/MentorChatModal'
 import Dialog from '../components/Dialog'
 import ErrorCard from '../components/ErrorCard'
 import { teamAvatar, basename } from '../lib/ui'
-import { gradeTotal, BONUS_POINTS, SUPER_BONUS_POINTS, SUPER_BONUS_VOK_POINTS } from '../lib/scoring'
+import { gradeTotal, BONUS_POINTS, SUPER_BONUS_VOK_POINTS } from '../lib/scoring'
 
 /** Целое число из поля ввода: защита от NaN и дробей, зажим в [0, max]. */
 function clampNum(raw: string, max: number): number {
@@ -23,7 +23,6 @@ interface Grade {
   submitted: boolean
   cases: number
   bonus: boolean
-  superBonus: boolean
   vok: number
   superBonusVok: boolean
   feedback: string
@@ -85,10 +84,10 @@ export default function Admin() {
           // «Сдала» определяется наличием ответа в таблице answers, а не величиной баллов —
           // иначе команда, сдавшая ответ и получившая 0, после перезагрузки выглядела бы «не сдала».
           const submitted = !!ans[t.id]
-            || (s ? (s.cases > 0 || s.bonus > 0 || s.superBonus > 0 || s.superBonusVok > 0 || s.vok > 0 || !!s.feedback) : false)
+            || (s ? (s.cases > 0 || s.bonus > 0 || s.superBonusVok > 0 || s.vok > 0 || !!s.feedback) : false)
           init[t.id] = s
-            ? { submitted, cases: s.cases, bonus: s.bonus > 0, superBonus: s.superBonus > 0, vok: s.vok, superBonusVok: s.superBonusVok > 0, feedback: s.feedback }
-            : { submitted, cases: 0, bonus: false, superBonus: false, vok: 0, superBonusVok: false, feedback: '' }
+            ? { submitted, cases: s.cases, bonus: s.bonus > 0, vok: s.vok, superBonusVok: s.superBonusVok > 0, feedback: s.feedback }
+            : { submitted, cases: 0, bonus: false, vok: 0, superBonusVok: false, feedback: '' }
         }
         setGrades(init)
         setAnswers(ans)
@@ -139,7 +138,6 @@ export default function Admin() {
             teamId: t.id, gameId,
             cases: g.submitted ? g.cases : 0,
             bonus: g.submitted && g.bonus ? BONUS_POINTS : 0,
-            superBonus: g.submitted && g.superBonus ? SUPER_BONUS_POINTS : 0,
             vok: g.submitted ? g.vok : 0,
             superBonusVok: g.submitted && g.superBonusVok ? SUPER_BONUS_VOK_POINTS : 0,
             feedback: g.submitted ? g.feedback : '',
@@ -253,7 +251,6 @@ export default function Admin() {
                   <th className="px-2 py-2.5 text-center">Сдала</th>
                   <th className="px-2 py-2.5 text-center">Очки за кейсы</th>
                   <th className="px-2 py-2.5 text-center">Бонус +1<br/><span className="font-normal normal-case text-[10px]">за нестандартное решение кейса</span></th>
-                  <th className="px-2 py-2.5 text-center">Супер +3</th>
                   <th className="px-2 py-2.5 text-center">ВОК %</th>
                   <th className="px-2 py-2.5 text-center">Супер +3<br/>ВОК</th>
                   <th className="px-2 py-2.5 text-left">ОС тренера</th>
@@ -544,9 +541,6 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
         <input type="checkbox" checked={g.bonus} disabled={!g.submitted} onChange={(e) => onChange({ bonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-alfa)] disabled:opacity-40" />
       </td>
       <td className="px-2 text-center">
-        <input type="checkbox" checked={g.superBonus} disabled={!g.submitted} onChange={(e) => onChange({ superBonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-gold)] disabled:opacity-40" />
-      </td>
-      <td className="px-2 text-center">
         <input
           type="number" min={0} max={100}
           value={g.vok}
@@ -655,14 +649,10 @@ const GradeCard = memo(function GradeCard({
         </label>
       </div>
 
-      <div className="mt-2 grid grid-cols-3 gap-2">
+      <div className="mt-2 grid grid-cols-2 gap-2">
         <label className="flex items-center justify-between gap-2 rounded-lg sf-1 px-3 py-2 text-sm font-semibold">
           <span className="leading-tight">Бонус&nbsp;+1<br/><span className="text-[11px] font-normal text-ink-soft">за нестандартное решение кейса</span></span>
           <input type="checkbox" checked={g.bonus} disabled={!g.submitted} onChange={(e) => onChange({ bonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-alfa)] disabled:opacity-40" />
-        </label>
-        <label className="flex items-center justify-between gap-2 rounded-lg sf-1 px-3 py-2 text-sm font-semibold">
-          <span className="leading-tight">Супер&nbsp;+3</span>
-          <input type="checkbox" checked={g.superBonus} disabled={!g.submitted} onChange={(e) => onChange({ superBonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-gold)] disabled:opacity-40" />
         </label>
         <label className="flex items-center justify-between gap-2 rounded-lg sf-1 px-3 py-2 text-sm font-semibold">
           <span className="leading-tight">Супер&nbsp;+3<br/><span className="text-[11px] text-ink-soft">ВОК</span></span>

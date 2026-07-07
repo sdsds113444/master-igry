@@ -547,7 +547,7 @@ export default function TeamCabinet() {
                 const s = scores[g.id]
                 if (!s) return null
                 const superVok = s.superBonusVok ?? 0
-                const sum = teamTotal({ cases: s.cases, bonus: s.bonus, superBonus: s.superBonus, superBonusVok: superVok })
+                const sum = teamTotal({ cases: s.cases, bonus: s.bonus, superBonusVok: superVok })
                 return (
                   <div key={g.id} className="rounded-2xl sf-1 p-3">
                     <div className="flex items-center gap-3">
@@ -557,13 +557,12 @@ export default function TeamCabinet() {
                         <div className="text-xs font-semibold text-ink-soft">
                           кейсы {s.cases}
                           {s.bonus > 0 && ` · бонус +${s.bonus}`}
-                          {s.superBonus > 0 && ` · супер-бонус +${s.superBonus}`}
                           {superVok > 0 && ` · супер ВОК +${superVok}`}
                         </div>
                       </div>
                       <div className="flex items-center gap-1 text-base font-bold">
                         {sum > 0 ? sum : '—'}
-                        {(s.superBonus > 0 || superVok > 0) && <Icon3D name="star" className="h-4 w-4 object-contain drop-shadow-sm" />}
+                        {superVok > 0 && <Icon3D name="star" className="h-4 w-4 object-contain drop-shadow-sm" />}
                       </div>
                     </div>
                     {s.feedback && (

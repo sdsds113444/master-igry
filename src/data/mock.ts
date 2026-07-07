@@ -23,7 +23,6 @@ export interface Game {
 export interface TeamScore {
   cases: number // общая оценка за кейсы (0–3)
   bonus: number // +1 за нестандарт
-  superBonus: number // +3 супер-бонус недели
   vok?: number // % ВОК
   superBonusVok?: number // +3 за лучший ВОК недели
   feedback?: string // текст обратной связи тренера
@@ -128,26 +127,25 @@ export const TEAMS: Team[] = NAMES.map((name, i) => {
   const strength = 0.35 + seeded(i, 1) * 0.6 // «сила» команды
   for (const g of GAMES) {
     if (g.status === 'locked') {
-      perGame[g.id] = { cases: 0, bonus: 0, superBonus: 0, vok: 0, superBonusVok: 0 }
+      perGame[g.id] = { cases: 0, bonus: 0, vok: 0, superBonusVok: 0 }
       continue
     }
     const played = g.status === 'done' || (g.status === 'current' && seeded(i, g.num) > 0.5)
     if (!played) {
-      perGame[g.id] = { cases: 0, bonus: 0, superBonus: 0, vok: 0, superBonusVok: 0 }
+      perGame[g.id] = { cases: 0, bonus: 0, vok: 0, superBonusVok: 0 }
       continue
     }
     // Общий балл за кейсы 0..3: сильнее команда (strength) → выше балл, плюс лёгкий разброс.
     const cases = Math.min(3, Math.max(0, Math.round(strength * 3 + (seeded(i, g.num + 2) - 0.5))))
     const bonus = seeded(i, g.num + 5) > 0.7 ? 1 : 0
-    const superBonus = seeded(i, g.num + 9) > 0.86 ? 3 : 0
     const vok = Math.round(70 + seeded(i, g.num + 19) * 26)
     const superBonusVok = seeded(i, g.num + 23) > 0.86 ? 3 : 0
     const feedback =
       seeded(i, g.num + 13) > 0.45
         ? FEEDBACK_POOL[Math.floor(seeded(i, g.num + 17) * FEEDBACK_POOL.length)]
         : undefined
-    perGame[g.id] = { cases, bonus, superBonus, vok, superBonusVok, feedback }
-    total += teamTotal({ cases, bonus, superBonus, superBonusVok })
+    perGame[g.id] = { cases, bonus, vok, superBonusVok, feedback }
+    total += teamTotal({ cases, bonus, superBonusVok })
   }
   return {
     id: `t${i + 1}`,
@@ -168,7 +166,7 @@ export const FEED: FeedItem[] = [
   { id: 'f1', kind: 'video', emoji: '🎬', title: 'Мультик недели 4 — «Эмпатия в реальном времени»', text: 'Новый эпизод КОЯ уже на доске! Смотрим до старта заданий.', date: 'Сегодня, 09:00' },
   { id: 'f2', kind: 'task', emoji: '📩', title: 'Задания недели 4 разосланы', text: 'Кейсы в кабинетах команд. Дедлайн — пятница, 13:00 МСК.', date: 'Сегодня, 09:05' },
   { id: 'f3', kind: 'rating', emoji: '📊', title: 'Рейтинг обновлён по итогам недели 3', text: '«Красные панды» вырвались вперёд.', date: 'Пятница, 17:00' },
-  { id: 'f4', kind: 'announce', emoji: '🏆', title: 'Супер-бонус недели 3', text: '+3 очка за лучший результат недели. Поздравляем!', date: 'Пятница, 17:10' },
+  { id: 'f4', kind: 'announce', emoji: '🏆', title: 'Супер-бонус недели 3', text: '+3 очка за лучший ВОК недели. Поздравляем!', date: 'Пятница, 17:10' },
 ]
 
 /* ---- Состав команды (капитан редактирует) ---- */
@@ -191,7 +189,7 @@ export const RULES = [
   { icon: '🎯', title: 'Цель', text: 'Прокачать решение вопроса на звонке/в чате — без перезвона и переводов.' },
   { icon: '🗓️', title: 'Ритм недели', text: 'Понедельник — мультик + кейсы в кабинете. До пятницы 13:00 капитан сдаёт ответ команды.' },
   { icon: '⭐', title: 'Оценка кейсов', text: '0 — не сдали · 1 — более 3 ошибок · 2 — менее 3 ошибок · 3 — без ошибок (по каждому кейсу).' },
-  { icon: '➕', title: 'Бонусы', text: 'Бонус +1 за нестандартное решение кейса. Супер-бонусы +3 — за лучшие результаты недели (в т.ч. по ВОК).' },
+  { icon: '➕', title: 'Бонусы', text: 'Бонус +1 за нестандартное решение кейса. Супер-бонус +3 — команде с лучшим ВОК недели.' },
   { icon: '📝', title: 'Проверка', text: 'Тренер (1 на 1–2 команды) даёт обратную связь и ставит балл. Рейтинг обновляется в пятницу.' },
   { icon: '🏆', title: 'Победитель', text: 'Команда с наибольшей суммой баллов за сезон. Итоги — в конце сезона.' },
 ]
