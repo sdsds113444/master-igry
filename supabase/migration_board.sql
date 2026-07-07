@@ -47,7 +47,7 @@ grant execute on function public.publish_game(text) to authenticated;
 -- стартовая лента (если пусто)
 insert into public.feed_items (kind, emoji, title, text)
 select v.kind, v.emoji, v.title, v.text from (values
-  ('rating',  '📊', 'Рейтинг обновлён по итогам недели 3', '«Красные панды» вырвались вперёд. Смотрите таблицу справа.'),
+  ('rating',  '📊', 'Рейтинг обновлён по итогам недели 3', '«Красные панды» вырвались вперёд.'),
   ('announce','🏆', 'Супер-бонус недели 3',               '+3 очка команде с лучшим FCR. Поздравляем!')
 ) as v(kind,emoji,title,text)
 where not exists (select 1 from public.feed_items);
