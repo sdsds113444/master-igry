@@ -2,7 +2,7 @@
 // ЕДИНЫЙ источник правды о том, что входит в сумму баллов команды.
 // Должен совпадать с SQL-функцией get_rating (supabase/migration_vok.sql):
 //   total = cases + bonus + super_bonus + super_bonus_vok
-// FCR и ВОК — это проценты (0..100), в сумму баллов они НЕ входят.
+// ВОК — это процент (0..100), в сумму баллов не входит.
 //
 // Раньше эта формула была скопирована в 5 местах (SQL, mock.ts, TeamCabinet,
 // две раскладки Admin). При добавлении ВОК-бонуса пришлось править все копии —
@@ -22,7 +22,7 @@ export const BONUS_POINTS = 1
 export const SUPER_BONUS_POINTS = 3
 export const SUPER_BONUS_VOK_POINTS = 3
 
-/** Сумма баллов команды за игру. Зеркалит SQL get_rating (fcr/vok исключены). */
+/** Сумма баллов команды за игру. Зеркалит SQL get_rating (vok исключён). */
 export function teamTotal(s: ScoreParts): number {
   return s.cases + s.bonus + s.superBonus + s.superBonusVok
 }

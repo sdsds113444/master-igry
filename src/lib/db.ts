@@ -17,13 +17,13 @@ export interface Session { teamId: string | null; code: string; role: Role; name
 export interface ChatMsg { id: string; author: string; text: string; time: string; me: boolean; role: Role }
 export interface RatingRow { id: string; rank: number; name: string; site: string; hue: number; total: number }
 export interface TeamInfo {
-  id: string; code: string; name: string; site: string; mentor: string; hue: number; coins: number
+  id: string; code: string; name: string; site: string; mentor: string; hue: number
 }
 export interface AdminTeamRow { id: string; code: string; name: string; site: string; hue: number }
 /** Игрок состава. id — ключ строки в БД: операции идут по нему, а не по имени
  *  (иначе полные тёзки в команде удалялись/ломались пачкой). */
 export interface RosterMember { id: string; name: string; isCaptain: boolean }
-export interface GradeRow { cases: number; bonus: number; superBonus: number; fcr: number; vok: number; superBonusVok: number; feedback: string }
+export interface GradeRow { cases: number; bonus: number; superBonus: number; vok: number; superBonusVok: number; feedback: string }
 
 // Демо-код админки ТОЛЬКО для офлайн-режима (моки, без реальных данных).
 // Боевой админ-код хранится в БД и НИКОГДА не попадает в репозиторий/бандл.
@@ -207,11 +207,11 @@ export async function getMyTeam(): Promise<TeamInfo | null> {
 
   if (!isSupabaseConfigured) {
     const t = TEAMS.find((x) => x.id === ses.teamId)
-    return t ? { id: t.id, code: t.code, name: t.name, site: t.site, mentor: t.mentor, hue: t.hue, coins: t.coins } : null
+    return t ? { id: t.id, code: t.code, name: t.name, site: t.site, mentor: t.mentor, hue: t.hue } : null
   }
 
   const sb = requireClient()
-  const { data, error } = await sb.from('teams').select('id, code, name, site, mentor, hue, coins').eq('id', ses.teamId).maybeSingle()
+  const { data, error } = await sb.from('teams').select('id, code, name, site, mentor, hue').eq('id', ses.teamId).maybeSingle()
   throwOn(error)
   return (data as TeamInfo) ?? null
 }
@@ -419,7 +419,6 @@ function mapScoreRow(r: Record<string, unknown>): GradeRow {
     cases: r.cases as number,
     bonus: r.bonus as number,
     superBonus: r.super_bonus as number,
-    fcr: r.fcr as number,
     vok: (r.vok as number) ?? 0,
     superBonusVok: (r.super_bonus_vok as number) ?? 0,
     feedback: (r.feedback as string) ?? '',
@@ -497,14 +496,14 @@ export async function getAnswerFileUrl(filePath: string): Promise<string | null>
   return data?.signedUrl ? toProxyUrl(data.signedUrl) : null
 }
 
-export interface GradeInput { teamId: string; gameId: string; cases: number; bonus: number; superBonus: number; fcr: number; vok: number; superBonusVok: number; feedback: string }
+export interface GradeInput { teamId: string; gameId: string; cases: number; bonus: number; superBonus: number; vok: number; superBonusVok: number; feedback: string }
 
 /** Маппинг GradeInput → строка scores (общий для одиночного и пакетного сохранения). */
 function gradeRow(i: GradeInput) {
   return {
     team_id: i.teamId, game_id: i.gameId,
     cases: i.cases, bonus: i.bonus, super_bonus: i.superBonus,
-    fcr: i.fcr, vok: i.vok, super_bonus_vok: i.superBonusVok,
+    vok: i.vok, super_bonus_vok: i.superBonusVok,
     feedback: i.feedback,
   }
 }
@@ -549,7 +548,7 @@ export async function getScoresForGame(gameId: string): Promise<Record<string, G
     const out: Record<string, GradeRow> = {}
     for (const t of TEAMS) {
       const s = t.perGame[gameId]
-      if (s) out[t.id] = { cases: s.cases, bonus: s.bonus, superBonus: s.superBonus, fcr: s.fcr, vok: s.vok ?? 0, superBonusVok: s.superBonusVok ?? 0, feedback: s.feedback ?? '' }
+      if (s) out[t.id] = { cases: s.cases, bonus: s.bonus, superBonus: s.superBonus, vok: s.vok ?? 0, superBonusVok: s.superBonusVok ?? 0, feedback: s.feedback ?? '' }
     }
     return out
   }
@@ -588,12 +587,13 @@ export async function getGames(): Promise<Game[]> {
   return (data as Game[] | null)?.length ? (data as Game[]) : GAMES
 }
 
-/** Текущая игра недели: последняя (по номеру) в статусе 'current'; иначе первая
- *  незакрытая. Возвращает null на пустом списке — тип честный, чтобы вызывающий не
- *  словил TypeError на `.id` (раньше тип обещал Game, а по факту мог быть undefined). */
+/** Активная игра недели: последняя (по номеру) в статусе 'current'. Если ни одна игра
+ *  не опубликована (все 'locked' — сезон ещё не стартовал, или пауза между неделями),
+ *  возвращает null: закрытую игру НЕЛЬЗЯ выдавать за текущую, иначе её мультик/кейсы
+ *  утекли бы до старта. Вызывающие показывают на null экран «задание скоро». */
 export function pickCurrentGame(games: Game[]): Game | null {
   const current = games.filter((g) => g.status === 'current').sort((a, b) => b.num - a.num)
-  return current[0] ?? games.find((g) => g.status !== 'done') ?? games[0] ?? null
+  return current[0] ?? null
 }
 
 export interface FeedRow { id: string; kind: FeedItem['kind']; title: string; text: string; date: string; emoji: string; gameId: string | null }

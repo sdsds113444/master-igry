@@ -24,7 +24,6 @@ interface Grade {
   cases: number
   bonus: boolean
   superBonus: boolean
-  fcr: number
   vok: number
   superBonusVok: boolean
   feedback: string
@@ -59,7 +58,7 @@ export default function Admin() {
         if (cancelled) return
         setGames(gs)
         setTeams(ts)
-        setGameId((cur) => cur || pickCurrentGame(gs)?.id || '')
+        setGameId((cur) => cur || pickCurrentGame(gs)?.id || gs[0]?.id || '')
       } catch {
         if (!cancelled) { setLoadError(true); setLoading(false) }
       }
@@ -86,10 +85,10 @@ export default function Admin() {
           // «Сдала» определяется наличием ответа в таблице answers, а не величиной баллов —
           // иначе команда, сдавшая ответ и получившая 0, после перезагрузки выглядела бы «не сдала».
           const submitted = !!ans[t.id]
-            || (s ? (s.cases > 0 || s.bonus > 0 || s.superBonus > 0 || s.superBonusVok > 0 || s.fcr > 0 || s.vok > 0 || !!s.feedback) : false)
+            || (s ? (s.cases > 0 || s.bonus > 0 || s.superBonus > 0 || s.superBonusVok > 0 || s.vok > 0 || !!s.feedback) : false)
           init[t.id] = s
-            ? { submitted, cases: s.cases, bonus: s.bonus > 0, superBonus: s.superBonus > 0, fcr: s.fcr, vok: s.vok, superBonusVok: s.superBonusVok > 0, feedback: s.feedback }
-            : { submitted, cases: 0, bonus: false, superBonus: false, fcr: 0, vok: 0, superBonusVok: false, feedback: '' }
+            ? { submitted, cases: s.cases, bonus: s.bonus > 0, superBonus: s.superBonus > 0, vok: s.vok, superBonusVok: s.superBonusVok > 0, feedback: s.feedback }
+            : { submitted, cases: 0, bonus: false, superBonus: false, vok: 0, superBonusVok: false, feedback: '' }
         }
         setGrades(init)
         setAnswers(ans)
@@ -134,14 +133,13 @@ export default function Admin() {
       await gradeMany(
         teams.map((t) => {
           const g = grades[t.id]
-          // Не сдала → строка полностью обнуляется (в т.ч. fcr/vok/feedback), чтобы
+          // Не сдала → строка полностью обнуляется (в т.ч. vok/feedback), чтобы
           // не оставалось «висящих» процентов/комментария при снятой галочке «сдала».
           return {
             teamId: t.id, gameId,
             cases: g.submitted ? g.cases : 0,
             bonus: g.submitted && g.bonus ? BONUS_POINTS : 0,
             superBonus: g.submitted && g.superBonus ? SUPER_BONUS_POINTS : 0,
-            fcr: g.submitted ? g.fcr : 0,
             vok: g.submitted ? g.vok : 0,
             superBonusVok: g.submitted && g.superBonusVok ? SUPER_BONUS_VOK_POINTS : 0,
             feedback: g.submitted ? g.feedback : '',
@@ -254,9 +252,8 @@ export default function Admin() {
                   <th className="px-5 py-2.5">Команда</th>
                   <th className="px-2 py-2.5 text-center">Сдала</th>
                   <th className="px-2 py-2.5 text-center">Очки за кейсы</th>
-                  <th className="px-2 py-2.5 text-center">Бонус +1</th>
-                  <th className="px-2 py-2.5 text-center">FCR %</th>
-                  <th className="px-2 py-2.5 text-center">Супер +3<br/>FCR</th>
+                  <th className="px-2 py-2.5 text-center">Бонус +1<br/><span className="font-normal normal-case text-[10px]">за нестандартное решение кейса</span></th>
+                  <th className="px-2 py-2.5 text-center">Супер +3</th>
                   <th className="px-2 py-2.5 text-center">ВОК %</th>
                   <th className="px-2 py-2.5 text-center">Супер +3<br/>ВОК</th>
                   <th className="px-2 py-2.5 text-left">ОС тренера</th>
@@ -547,15 +544,6 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
         <input type="checkbox" checked={g.bonus} disabled={!g.submitted} onChange={(e) => onChange({ bonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-alfa)] disabled:opacity-40" />
       </td>
       <td className="px-2 text-center">
-        <input
-          type="number" min={0} max={100}
-          value={g.fcr}
-          disabled={!g.submitted}
-          onChange={(e) => onChange({ fcr: clampNum(e.target.value, 100) })}
-          className="w-16 rounded-lg border border-black/10 sf-3 px-2 py-1 text-center font-bold outline-none focus:border-alfa/50 disabled:opacity-40"
-        />
-      </td>
-      <td className="px-2 text-center">
         <input type="checkbox" checked={g.superBonus} disabled={!g.submitted} onChange={(e) => onChange({ superBonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-gold)] disabled:opacity-40" />
       </td>
       <td className="px-2 text-center">
@@ -656,16 +644,6 @@ const GradeCard = memo(function GradeCard({
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">FCR %</span>
-          <input
-            type="number" min={0} max={100}
-            value={g.fcr}
-            disabled={!g.submitted}
-            onChange={(e) => onChange({ fcr: clampNum(e.target.value, 100) })}
-            className={fieldCls}
-          />
-        </label>
-        <label className="block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">ВОК %</span>
           <input
             type="number" min={0} max={100}
@@ -679,11 +657,11 @@ const GradeCard = memo(function GradeCard({
 
       <div className="mt-2 grid grid-cols-3 gap-2">
         <label className="flex items-center justify-between gap-2 rounded-lg sf-1 px-3 py-2 text-sm font-semibold">
-          Бонус +1
+          <span className="leading-tight">Бонус&nbsp;+1<br/><span className="text-[11px] font-normal text-ink-soft">за нестандартное решение кейса</span></span>
           <input type="checkbox" checked={g.bonus} disabled={!g.submitted} onChange={(e) => onChange({ bonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-alfa)] disabled:opacity-40" />
         </label>
         <label className="flex items-center justify-between gap-2 rounded-lg sf-1 px-3 py-2 text-sm font-semibold">
-          <span className="leading-tight">Супер&nbsp;+3<br/><span className="text-[11px] text-ink-soft">FCR</span></span>
+          <span className="leading-tight">Супер&nbsp;+3</span>
           <input type="checkbox" checked={g.superBonus} disabled={!g.submitted} onChange={(e) => onChange({ superBonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-gold)] disabled:opacity-40" />
         </label>
         <label className="flex items-center justify-between gap-2 rounded-lg sf-1 px-3 py-2 text-sm font-semibold">

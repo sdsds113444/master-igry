@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { teamTotal, gradeTotal, BONUS_POINTS, SUPER_BONUS_POINTS, SUPER_BONUS_VOK_POINTS } from './scoring'
 
 describe('teamTotal', () => {
-  it('суммирует кейсы + бонус + оба супер-бонуса (fcr/vok НЕ входят)', () => {
+  it('суммирует кейсы + бонус + оба супер-бонуса (vok НЕ входит)', () => {
     // Максимум за игру по новой модели: 3 (кейсы) + 1 + 3 + 3 = 10.
     expect(teamTotal({ cases: 3, bonus: 1, superBonus: 3, superBonusVok: 3 })).toBe(10)
   })

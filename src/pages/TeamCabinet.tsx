@@ -196,14 +196,12 @@ export default function TeamCabinet() {
     )
   }
 
-  if (!current) {
-    return <ErrorCard title="Активная игра ещё не назначена" hint="Задание недели скоро появится — загляните чуть позже." />
-  }
-
-  const videoTitle = `Мультик КОЯ — ${current.title}`
+  // current может быть null до старта сезона (все игры locked): кабинет всё равно
+  // работает — состав и чат команды доступны, а блок задания показывает «скоро».
+  const videoTitle = current ? `Мультик КОЯ — ${current.title}` : ''
   // Ассеты из БД (video_url/file_url), с откатом на статичные карты и защитой от undefined.
-  const videoSrc = current.video_url || GAME_VIDEO[current.id] || ''
-  const casesHref = current.file_url || GAME_FILE[current.id] || ''
+  const videoSrc = current ? (current.video_url || GAME_VIDEO[current.id] || '') : ''
+  const casesHref = current ? (current.file_url || GAME_FILE[current.id] || '') : ''
   const fileName = casesHref ? basename(casesHref, 'кейсы.xlsx') : 'кейсы.xlsx'
 
   return (
@@ -238,10 +236,6 @@ export default function TeamCabinet() {
         <div className="flex gap-3">
           <Stat label="Место" value={`#${rank}`} />
           <Stat label="Очки" value={total} />
-          <Stat
-            label={<span className="inline-flex items-center gap-1"><Icon3D name="coin" className="h-4 w-4 object-contain" /> Койны</span>}
-            value={me.coins}
-          />
         </div>
         <div className="flex flex-wrap gap-2">
           <a
@@ -271,6 +265,8 @@ export default function TeamCabinet() {
       <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
         {/* ==== ЛЕВАЯ КОЛОНКА ==== */}
         <section className="space-y-4">
+          {current ? (
+          <>
           <div className="glass rounded-glass p-5">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-alfa-ink">
               <Clock size={13} /> Дедлайн: {DEADLINE}
@@ -428,6 +424,16 @@ export default function TeamCabinet() {
               </>
             )}
           </div>
+          </>
+          ) : (
+            <div className="glass rounded-glass p-6 text-center">
+              <h2 className="font-display text-xl font-extrabold">Задание недели скоро появится</h2>
+              <p className="mt-1 text-sm text-ink-soft">
+                Мультик и кейсы откроются, когда организатор запустит игру недели.
+                А пока соберите состав команды и обсудите всё в чате.
+              </p>
+            </div>
+          )}
 
           {/* Чат команды */}
           <div className="glass rounded-glass p-5">
@@ -551,7 +557,7 @@ export default function TeamCabinet() {
                         <div className="text-xs font-semibold text-ink-soft">
                           кейсы {s.cases}
                           {s.bonus > 0 && ` · бонус +${s.bonus}`}
-                          {s.superBonus > 0 && ` · супер FCR +${s.superBonus}`}
+                          {s.superBonus > 0 && ` · супер-бонус +${s.superBonus}`}
                           {superVok > 0 && ` · супер ВОК +${superVok}`}
                         </div>
                       </div>

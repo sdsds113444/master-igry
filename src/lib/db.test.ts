@@ -33,11 +33,14 @@ describe('pickCurrentGame', () => {
   it('берёт последнюю по номеру среди статуса current', () => {
     expect(pickCurrentGame([g('a', 1, 'done'), g('b', 2, 'current'), g('c', 3, 'current')])?.id).toBe('c')
   })
-  it('если current нет — первую незакрытую (не done)', () => {
-    expect(pickCurrentGame([g('a', 1, 'done'), g('b', 2, 'locked')])?.id).toBe('b')
+  it('если current нет — null (закрытую игру не выдаём за активную)', () => {
+    expect(pickCurrentGame([g('a', 1, 'done'), g('b', 2, 'locked')])).toBeNull()
   })
-  it('если все done — первую игру', () => {
-    expect(pickCurrentGame([g('a', 1, 'done'), g('b', 2, 'done')])?.id).toBe('a')
+  it('все игры locked (до старта сезона) — null', () => {
+    expect(pickCurrentGame([g('a', 1, 'locked'), g('b', 2, 'locked')])).toBeNull()
+  })
+  it('все done (пауза между неделями) — null', () => {
+    expect(pickCurrentGame([g('a', 1, 'done'), g('b', 2, 'done')])).toBeNull()
   })
   it('на пустом списке возвращает null (без TypeError у вызывающих)', () => {
     expect(pickCurrentGame([])).toBeNull()

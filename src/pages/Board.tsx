@@ -36,12 +36,12 @@ const GAME_IMAGE_POSITION: Record<string, string> = {
 }
 
 const DROP_ICONS: Icon3DName[] = [
-  'coin',
+  'star',
   'trophy',
   'star',
-  'coin',
   'trophy',
   'star',
+  'trophy',
 ]
 
 export default function Board() {
@@ -130,11 +130,16 @@ export default function Board() {
   }
 
   const doneCount = games.filter((g) => g.status === 'done').length
-  const currentGame = pickCurrentGame(games)
   // Пустой список игр (БД не настроена) — не роняем страницу обращением к .week/.id.
-  if (!currentGame) {
+  if (games.length === 0) {
     return <ErrorCard title="Игры сезона ещё не настроены" hint="Загляните позже — задания скоро появятся." />
   }
+  const activeGame = pickCurrentGame(games) // опубликованная игра недели или null (до старта)
+  // Сезон стартовал, только если админ уже опубликовал хотя бы одну игру. До старта
+  // (все игры locked) шапка не утверждает «сейчас идёт игра».
+  const seasonStarted = games.some((g) => g.status === 'current' || g.status === 'done')
+  // Опорная игра для ссылок (неделя в шапке, фолбэк ленты), когда активной ещё нет.
+  const refGame = activeGame ?? games.find((g) => g.status === 'done') ?? games[0]
 
   return (
     <div className="space-y-6">
@@ -161,17 +166,19 @@ export default function Board() {
           {/* Текст */}
           <div className="relative z-10 p-7 sm:p-9">
             <span className="inline-flex items-center gap-2 rounded-full bg-alfa/10 px-3 py-1 text-xs font-bold text-alfa-ink">
-              <Flame size={13} /> Сезон 1 · Неделя {currentGame.week} из 9
+              <Flame size={13} /> {seasonStarted ? `Сезон 1 · Неделя ${refGame.week} из 9` : 'Сезон 1 · Скоро старт'}
             </span>
             <h1 className="mt-3 font-display text-3xl font-extrabold leading-[1.1] sm:text-4xl">
               Общая доска <span className="text-gradient">чемпионата</span>
             </h1>
             <p className="mt-2 max-w-md text-sm text-ink-soft">
-              Здесь выходят мультики КОЯ, прилетают задания недели и обновляется рейтинг всех
-              30 команд. Сейчас идёт игра «{currentGame.title}».
+              {activeGame
+                ? <>Здесь выходят мультики КОЯ, прилетают задания недели и обновляется рейтинг всех 30 команд. Сейчас идёт игра «{activeGame.title}».</>
+                : <>Здесь будут выходить мультики КОЯ, прилетать задания недели и обновляться рейтинг всех 30 команд. Начните со вступительного мультика — он объясняет правила. Игры сезона откроются на старте.</>}
             </p>
 
-            {/* Прогресс сезона */}
+            {/* Прогресс сезона — показываем, только когда сезон уже идёт */}
+            {seasonStarted && (
             <div className="mt-5 max-w-md">
               <div className="mb-1.5 flex justify-between text-xs font-semibold text-ink-soft">
                 <span>Прогресс сезона</span>
@@ -187,6 +194,7 @@ export default function Board() {
                 />
               </div>
             </div>
+            )}
 
             <div className="mt-6 flex flex-wrap gap-3">
               <Link to="/team" className="btn-alfa flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold">
@@ -233,6 +241,22 @@ export default function Board() {
                   WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 24%)',
                 }}
               />
+              {/* Крупная кнопка «Вступление» поверх маскота: стартовый мультик КОЯ
+                  объясняет правила. Клик по всей сцене запускает его — чтобы на старте
+                  было очевидно, куда нажать (сам маскот остаётся на месте). */}
+              <button
+                type="button"
+                onClick={() => setVideo({ title: 'Стартовый мультик КОЯ', src: START_VIDEO })}
+                aria-label="Смотреть вступительный мультик КОЯ"
+                className="group absolute inset-0 z-10 flex flex-col items-center justify-center gap-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+              >
+                <span className="grid h-16 w-16 place-items-center rounded-full bg-white/85 text-alfa shadow-xl backdrop-blur transition-transform group-hover:scale-110">
+                  <Play size={26} fill="currentColor" />
+                </span>
+                <span className="rounded-full bg-black/55 px-4 py-1.5 text-sm font-extrabold text-white shadow-lg backdrop-blur">
+                  ▶ Вступление
+                </span>
+              </button>
               {/* падающие коечки */}
               {DROP_ICONS.map((name, i) => (
                 <Icon3D
@@ -253,7 +277,7 @@ export default function Board() {
                     initial={{ opacity: 0, scale: 0.9, y: 10 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     transition={{ delay: 0.5, type: 'spring', stiffness: 120 }}
-                    className="glass-dark absolute right-4 top-4 rounded-2xl px-4 py-3"
+                    className="glass-dark pointer-events-none absolute right-4 top-4 z-20 rounded-2xl px-4 py-3"
                     style={{ transform: 'translateZ(40px)' }}
                   >
                     <div className="text-xs font-semibold uppercase tracking-wider text-white/70">
@@ -379,8 +403,8 @@ export default function Board() {
           </h2>
           <div className="space-y-3">
             {feed.map((f, i) => {
-              const vg = games.find((x) => x.id === (f.gameId ?? currentGame.id))
-              const videoSrc = vg?.video_url || GAME_VIDEO[f.gameId ?? currentGame.id] || ''
+              const vg = games.find((x) => x.id === (f.gameId ?? refGame.id))
+              const videoSrc = vg?.video_url || GAME_VIDEO[f.gameId ?? refGame.id] || ''
               const openVideo = () => { if (videoSrc) setVideo({ title: f.title, src: videoSrc }) }
               const interactive = f.kind === 'video' && !!videoSrc
               return (

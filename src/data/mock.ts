@@ -23,8 +23,7 @@ export interface Game {
 export interface TeamScore {
   cases: number // общая оценка за кейсы (0–3)
   bonus: number // +1 за нестандарт
-  superBonus: number // +3 за лучший FCR недели
-  fcr: number // % FCR
+  superBonus: number // +3 супер-бонус недели
   vok?: number // % ВОК
   superBonusVok?: number // +3 за лучший ВОК недели
   feedback?: string // текст обратной связи тренера
@@ -39,7 +38,6 @@ export interface Team {
   hue: number
   perGame: Record<string, TeamScore>
   total: number
-  coins: number
   rank?: number
 }
 
@@ -61,11 +59,11 @@ export interface CaseItem {
 
 /* ---- 7 игр сезона ---- */
 export const GAMES: Game[] = [
-  { id: 'detective', num: 1, week: 1, title: 'Детектив КЦ', skill: 'Найти боль клиента и решить в одном касании', emoji: '🕵️', accent: '#ef3124', status: 'done' },
-  { id: 'noforward', num: 2, week: 2, title: 'Не перекладывай!', skill: 'Взять проблему на себя, не переводить', emoji: '🙅', accent: '#f0782b', status: 'done' },
-  { id: 'iknow', num: 3, week: 3, title: 'Продуктовый «Я знаю всё»', skill: 'Знание продуктов и регламентов', emoji: '🧠', accent: '#e8b21e', status: 'done' },
-  { id: 'empathy', num: 4, week: 4, title: 'Эмпатия в реальном времени', skill: 'Услышать эмоцию раньше, чем ответить', emoji: '💗', accent: '#d6338f', status: 'current' },
-  { id: 'onecall', num: 5, week: 5, title: 'Один звонок — одно решение', skill: 'Держать высокий FCR стабильно', emoji: '🎯', accent: '#8b46d6', status: 'locked' },
+  { id: 'detective', num: 1, week: 1, title: 'Детектив КЦ', skill: 'Найти боль клиента и решить в одном касании', emoji: '🕵️', accent: '#ef3124', status: 'locked' },
+  { id: 'noforward', num: 2, week: 2, title: 'Не перекладывай!', skill: 'Взять проблему на себя, не переводить', emoji: '🙅', accent: '#f0782b', status: 'locked' },
+  { id: 'iknow', num: 3, week: 3, title: 'Продуктовый «Я знаю всё»', skill: 'Знание продуктов и регламентов', emoji: '🧠', accent: '#e8b21e', status: 'locked' },
+  { id: 'empathy', num: 4, week: 4, title: 'Эмпатия в реальном времени', skill: 'Услышать эмоцию раньше, чем ответить', emoji: '💗', accent: '#d6338f', status: 'locked' },
+  { id: 'onecall', num: 5, week: 5, title: 'Один звонок — одно решение', skill: 'Решать вопрос за один контакт стабильно', emoji: '🎯', accent: '#8b46d6', status: 'locked' },
   { id: 'captains', num: 6, week: 6, title: 'Битва капитанов', skill: 'Капитан показывает всё на письме', emoji: '⚔️', accent: '#3f74e0', status: 'locked' },
   { id: 'marathon', num: 7, week: 7, title: 'Альфа-марафон сезона', skill: 'Финал: публичная аттестация площадки', emoji: '🏁', accent: '#1ea672', status: 'locked' },
 ]
@@ -101,7 +99,7 @@ export const GAME_FILE: Record<string, string> = {
 
 /* ---- Команды ---- */
 const NAMES = [
-  'Красные панды', 'Мастера FCR', 'Один звонок', 'Эмпаты', 'Барсы КЦ', 'Детективы',
+  'Красные панды', 'Мастера сервиса', 'Один звонок', 'Эмпаты', 'Барсы КЦ', 'Детективы',
   'Альфа-волки', 'Голос клиента', 'Без перевода', 'Скорость 300', 'Финал-бро', 'Тёплый приём',
   'Решалы', 'Капитаны', 'Первый контакт', 'Огонь-команда', 'Сервис-герои', 'Панда-сила',
   'Клиент №1', 'Топ-линия', 'Экспертиза', 'Разрулим', 'Ноль перезвонов', 'Про-операторы',
@@ -117,7 +115,7 @@ function seeded(i: number, salt: number) {
 }
 
 const FEEDBACK_POOL = [
-  'Сильный ответ по FCR — клиенту не пришлось бы перезванивать. Добавьте больше живой эмпатии в первом кейсе.',
+  'Сильный ответ — клиенту не пришлось бы перезванивать. Добавьте больше живой эмпатии в первом кейсе.',
   'Во 2-м кейсе проскочило «переведу в отдел» — за это снял балл. В остальном — отлично!',
   'Эталонное решение по 3-му кейсу, забираю в примеры для онбординга 👏',
   'Хорошо, но ответы суховаты: признайте эмоцию клиента словами, а не дежурным «понимаю».',
@@ -130,26 +128,25 @@ export const TEAMS: Team[] = NAMES.map((name, i) => {
   const strength = 0.35 + seeded(i, 1) * 0.6 // «сила» команды
   for (const g of GAMES) {
     if (g.status === 'locked') {
-      perGame[g.id] = { cases: 0, bonus: 0, superBonus: 0, fcr: 0, vok: 0, superBonusVok: 0 }
+      perGame[g.id] = { cases: 0, bonus: 0, superBonus: 0, vok: 0, superBonusVok: 0 }
       continue
     }
     const played = g.status === 'done' || (g.status === 'current' && seeded(i, g.num) > 0.5)
     if (!played) {
-      perGame[g.id] = { cases: 0, bonus: 0, superBonus: 0, fcr: 0, vok: 0, superBonusVok: 0 }
+      perGame[g.id] = { cases: 0, bonus: 0, superBonus: 0, vok: 0, superBonusVok: 0 }
       continue
     }
     // Общий балл за кейсы 0..3: сильнее команда (strength) → выше балл, плюс лёгкий разброс.
     const cases = Math.min(3, Math.max(0, Math.round(strength * 3 + (seeded(i, g.num + 2) - 0.5))))
     const bonus = seeded(i, g.num + 5) > 0.7 ? 1 : 0
     const superBonus = seeded(i, g.num + 9) > 0.86 ? 3 : 0
-    const fcr = Math.round(70 + seeded(i, g.num + 11) * 26)
     const vok = Math.round(70 + seeded(i, g.num + 19) * 26)
     const superBonusVok = seeded(i, g.num + 23) > 0.86 ? 3 : 0
     const feedback =
       seeded(i, g.num + 13) > 0.45
         ? FEEDBACK_POOL[Math.floor(seeded(i, g.num + 17) * FEEDBACK_POOL.length)]
         : undefined
-    perGame[g.id] = { cases, bonus, superBonus, fcr, vok, superBonusVok, feedback }
+    perGame[g.id] = { cases, bonus, superBonus, vok, superBonusVok, feedback }
     total += teamTotal({ cases, bonus, superBonus, superBonusVok })
   }
   return {
@@ -161,7 +158,6 @@ export const TEAMS: Team[] = NAMES.map((name, i) => {
     hue: Math.round(seeded(i, 3) * 360),
     perGame,
     total,
-    coins: 40 + total * 5,
   }
 })
   .sort((a, b) => b.total - a.total)
@@ -172,7 +168,7 @@ export const FEED: FeedItem[] = [
   { id: 'f1', kind: 'video', emoji: '🎬', title: 'Мультик недели 4 — «Эмпатия в реальном времени»', text: 'Новый эпизод КОЯ уже на доске! Смотрим до старта заданий.', date: 'Сегодня, 09:00' },
   { id: 'f2', kind: 'task', emoji: '📩', title: 'Задания недели 4 разосланы', text: 'Кейсы в кабинетах команд. Дедлайн — пятница, 13:00 МСК.', date: 'Сегодня, 09:05' },
   { id: 'f3', kind: 'rating', emoji: '📊', title: 'Рейтинг обновлён по итогам недели 3', text: '«Красные панды» вырвались вперёд.', date: 'Пятница, 17:00' },
-  { id: 'f4', kind: 'announce', emoji: '🏆', title: 'Супер-бонус недели 3', text: '+3 очка команде с лучшим FCR. Поздравляем!', date: 'Пятница, 17:10' },
+  { id: 'f4', kind: 'announce', emoji: '🏆', title: 'Супер-бонус недели 3', text: '+3 очка за лучший результат недели. Поздравляем!', date: 'Пятница, 17:10' },
 ]
 
 /* ---- Состав команды (капитан редактирует) ---- */
@@ -192,10 +188,10 @@ export const TEAM_CHAT_SEED = [
 export const RULES = [
   { icon: '🎮', title: 'Формат', text: 'Онлайн-игра между командами контакт-центра. Сезон — 9 недель, 7 игр.' },
   { icon: '👥', title: 'Команды', text: '30 команд по 10 человек. Капитан регистрирует состав в личном кабинете.' },
-  { icon: '🎯', title: 'Цель', text: 'Прокачать решение вопроса на звонке/в чате — без перезвона и переводов (FCR).' },
+  { icon: '🎯', title: 'Цель', text: 'Прокачать решение вопроса на звонке/в чате — без перезвона и переводов.' },
   { icon: '🗓️', title: 'Ритм недели', text: 'Понедельник — мультик + кейсы в кабинете. До пятницы 13:00 капитан сдаёт ответ команды.' },
   { icon: '⭐', title: 'Оценка кейсов', text: '0 — не сдали · 1 — более 3 ошибок · 2 — менее 3 ошибок · 3 — без ошибок (по каждому кейсу).' },
-  { icon: '➕', title: 'Бонусы', text: 'Бонус +1 за нестандартное решение. Супер-бонусы +3: команде с лучшим FCR недели и команде с лучшим ВОК недели.' },
+  { icon: '➕', title: 'Бонусы', text: 'Бонус +1 за нестандартное решение кейса. Супер-бонусы +3 — за лучшие результаты недели (в т.ч. по ВОК).' },
   { icon: '📝', title: 'Проверка', text: 'Тренер (1 на 1–2 команды) даёт обратную связь и ставит балл. Рейтинг обновляется в пятницу.' },
   { icon: '🏆', title: 'Победитель', text: 'Команда с наибольшей суммой баллов за сезон. Итоги — в конце сезона.' },
 ]
@@ -207,7 +203,6 @@ export const RULES = [
 export const PRIZES = [
   { place: '1 место', emoji: '🥇', title: 'Корпоратив на 100 000 ₽', text: 'Организация праздника для команды-победителя.', accent: '#ffc244', chipBg: '#ffc244', chipFg: '#4a3400' },
   { place: '2–3 место', emoji: '🥈', title: 'Мерч Альфы', text: 'Фирменные наборы каждому участнику команды.', accent: '#c9cdd6', chipBg: '#c9cdd6', chipFg: '#2c3038' },
-  { place: 'Все участники', emoji: '🐾', title: 'КОЯ-койны', text: 'Койны за активность весь сезон — копите и обменивайте на мерч Альфы.', accent: '#ef3124', chipBg: '#c81e12', chipFg: '#ffffff' },
 ]
 
 /** Приписка под блоком призов — сроки подведения итогов и вручения (регламент). */
