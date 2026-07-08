@@ -122,6 +122,10 @@ const mockRoster: Record<string, RosterMember[]> = {}
 const mockChat: Record<string, ChatMsg[]> = {}
 const mockSubs: Record<string, ((m: ChatMsg) => void)[]> = {}
 const mockSubmissions: Record<string, { answer: string; fileName: string | null }> = {}
+const mockReactions: Record<string, ReactionRow[]> = {}
+const mockReactionSubs: Record<string, ((r: ReactionEvent) => void)[]> = {}
+let mockReactionId = 0
+const MOCK_ME = 'me' // стабильный «свой» user_id в демо-режиме (нет реальной auth-сессии)
 
 // ---------- анонимная сессия Supabase (нужна до redeem_code) ----------
 async function ensureAnon() {
@@ -385,6 +389,104 @@ export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void, c
       sb.removeChannel(ch)
     },
   }
+}
+
+// =====================================================================
+// РЕАКЦИИ НА СООБЩЕНИЯ (👍❤️😂🔥👏🎉)
+// =====================================================================
+export const REACTION_EMOJIS = ['👍', '❤️', '😂', '🔥', '👏', '🎉'] as const
+export type ReactionEmoji = (typeof REACTION_EMOJIS)[number]
+
+export interface ReactionRow { id: string; messageId: string; userId: string; emoji: string }
+type ReactionEvent = { type: 'add' | 'remove'; row: ReactionRow }
+
+/** «Это моя реакция?» — в моке нет реальной auth-сессии (getMyUid() вернул бы null),
+ *  поэтому свои реакции там метятся константой MOCK_ME. */
+export function isMyReaction(userId: string): boolean {
+  return userId === (isSupabaseConfigured ? getMyUid() : MOCK_ME)
+}
+
+/** Реакции всех сообщений канала (командного или mentor) одним запросом —
+ *  дешевле, чем по одной на сообщение. Ключ группировки на клиенте — messageId. */
+export async function listReactions(teamId: string, channel: ChatChannel = 'team'): Promise<ReactionRow[]> {
+  if (!isSupabaseConfigured) {
+    return mockReactions[`${teamId}:${channel}`] ?? []
+  }
+  const sb = requireClient()
+  const { data, error } = await sb.from('message_reactions')
+    .select('id, message_id, user_id, emoji')
+    .eq('team_id', teamId).eq('channel', channel)
+  throwOn(error)
+  return (data ?? []).map((r) => ({
+    id: r.id as string, messageId: r.message_id as string, userId: r.user_id as string, emoji: r.emoji as string,
+  }))
+}
+
+/** Поставить/снять реакцию (toggle). mine — уже стоит ли она у меня (клиент решает
+ *  add/remove сам, чтобы не гонять лишний select перед каждым кликом). */
+export async function toggleReaction(
+  teamId: string, channel: ChatChannel, messageId: string, emoji: ReactionEmoji, mine: boolean,
+): Promise<void> {
+  if (!isSupabaseConfigured) {
+    const key = `${teamId}:${channel}`
+    const list = mockReactions[key] ?? (mockReactions[key] = [])
+    if (mine) {
+      const idx = list.findIndex((r) => r.messageId === messageId && r.userId === MOCK_ME && r.emoji === emoji)
+      if (idx === -1) return
+      const [removed] = list.splice(idx, 1)
+      ;(mockReactionSubs[key] ?? []).forEach((cb) => cb({ type: 'remove', row: removed }))
+    } else {
+      const row: ReactionRow = { id: 'r' + mockReactionId++, messageId, userId: MOCK_ME, emoji }
+      list.push(row)
+      ;(mockReactionSubs[key] ?? []).forEach((cb) => cb({ type: 'add', row }))
+    }
+    return
+  }
+  const sb = requireClient()
+  if (mine) {
+    const { error } = await sb.from('message_reactions').delete()
+      .eq('message_id', messageId).eq('emoji', emoji).eq('user_id', getMyUid() ?? '')
+    throwOn(error)
+  } else {
+    // insert — team_id/channel/user_id подставляет серверный триггер, отправлять их не нужно.
+    const { error } = await sb.from('message_reactions').insert({ message_id: messageId, emoji })
+    // Гонка двойного клика/двух вкладок → уникальный constraint (23505) — не ошибка UX,
+    // реакция и так уже стоит, просто молчим.
+    if (error && (error as { code?: string }).code !== '23505') throwOn(error)
+  }
+}
+
+/** Подписка на изменения реакций канала (realtime; без фоллбэк-опроса — реакции
+ *  не критичны к доставке день-в-день, а мгновенный отклик даёт сам optimistic-UI). */
+export function subscribeReactions(
+  teamId: string, channel: ChatChannel, onChange: (e: ReactionEvent) => void,
+): { unsubscribe(): void } {
+  const key = `${teamId}:${channel}`
+  if (!isSupabaseConfigured) {
+    ;(mockReactionSubs[key] ??= []).push(onChange)
+    return { unsubscribe() { mockReactionSubs[key] = (mockReactionSubs[key] ?? []).filter((c) => c !== onChange) } }
+  }
+  const sb = requireClient()
+  const topic = `reactions-${key}-${Math.random().toString(36).slice(2)}`
+  const ch = sb.channel(topic)
+    .on('postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'message_reactions', filter: `team_id=eq.${teamId}` },
+      (payload) => {
+        const r = payload.new as { id: string; message_id: string; user_id: string; emoji: string; channel: ChatChannel }
+        if (r.channel !== channel) return
+        onChange({ type: 'add', row: { id: r.id, messageId: r.message_id, userId: r.user_id, emoji: r.emoji } })
+      })
+    .on('postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'message_reactions', filter: `team_id=eq.${teamId}` },
+      (payload) => {
+        // DELETE отдаёт только реплицируемые колонки старой строки — у нас без REPLICA
+        // IDENTITY FULL это будет как минимум id (PK), этого достаточно для удаления по id.
+        const r = payload.old as { id: string; message_id?: string; user_id?: string; emoji?: string; channel?: ChatChannel }
+        if (r.channel !== undefined && r.channel !== channel) return
+        onChange({ type: 'remove', row: { id: r.id, messageId: r.message_id ?? '', userId: r.user_id ?? '', emoji: r.emoji ?? '' } })
+      })
+    .subscribe()
+  return { unsubscribe() { sb.removeChannel(ch) } }
 }
 
 // =====================================================================
