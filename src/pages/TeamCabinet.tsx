@@ -101,7 +101,8 @@ export default function TeamCabinet() {
   }, [])
 
   // «Пипочка»: новый ответ тренера → красная точка на кнопке «Написать тренеру».
-  // Опрос раз в 15с + при возврате на вкладку (realtime-сокет на моб. сетях ненадёжен).
+  // Опрос раз в 45с (не критична секундная свежесть, важно не грузить бесплатный
+  // тариф Supabase лишними запросами) + при возврате на вкладку.
   useEffect(() => {
     if (!me) return
     let stopped = false
@@ -113,7 +114,7 @@ export default function TeamCabinet() {
       } catch { /* тихо: фоновая проверка */ }
     }
     check()
-    const timer = window.setInterval(check, 15000)
+    const timer = window.setInterval(check, 45000)
     window.addEventListener('focus', check)
     return () => { stopped = true; window.clearInterval(timer); window.removeEventListener('focus', check) }
   }, [me])

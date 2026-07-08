@@ -128,8 +128,10 @@ export default function Admin() {
     return () => { cancelled = true }
   }, [gameId, teams])
 
-  // Опрос непрочитанных сообщений от команд (realtime ненадёжен на моб. сетях):
-  // раз в 15с + при возврате на вкладку. Звук — когда появилось НОВОЕ непрочитанное.
+  // Опрос непрочитанных сообщений от команд: раз в 45с (не критична секундная
+  // свежесть, важно не грузить бесплатный тариф Supabase лишними запросами при
+  // нескольких одновременных тестерах) + при возврате на вкладку. Звук — когда
+  // появилось НОВОЕ непрочитанное.
   useEffect(() => {
     let stopped = false
     async function check() {
@@ -144,7 +146,7 @@ export default function Admin() {
       } catch { /* тихо: фоновый опрос */ }
     }
     check()
-    const timer = window.setInterval(check, 15000)
+    const timer = window.setInterval(check, 45000)
     window.addEventListener('focus', check)
     return () => { stopped = true; window.clearInterval(timer); window.removeEventListener('focus', check) }
   }, [])
