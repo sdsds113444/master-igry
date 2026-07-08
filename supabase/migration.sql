@@ -75,8 +75,8 @@ create table if not exists public.scores (
   bonus           int  default 0 check (bonus in (0,1)),
   super_bonus     int  default 0 check (super_bonus in (0,3)),      -- +3 за лучший FCR недели
   fcr             int  default 0 check (fcr between 0 and 100),
-  vok             int  default 0 check (vok between 0 and 100),     -- % ВОК
-  super_bonus_vok int  default 0 check (super_bonus_vok in (0,3)),  -- +3 за лучший ВОК недели
+  vok             int  default 0 check (vok between 0 and 100),     -- % VOC
+  super_bonus_vok int  default 0 check (super_bonus_vok in (0,3)),  -- +3 за лучший VOC недели
   feedback        text,
   updated_at      timestamptz default now(),
   primary key (team_id, game_id)

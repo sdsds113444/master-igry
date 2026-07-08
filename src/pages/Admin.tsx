@@ -321,8 +321,8 @@ export default function Admin() {
                   <th className="px-2 py-2.5 text-center">Сдала</th>
                   <th className="px-2 py-2.5 text-center">Очки за кейсы</th>
                   <th className="px-2 py-2.5 text-center">Бонус +1<br/><span className="font-normal normal-case text-[10px]">за нестандартное решение кейса</span></th>
-                  <th className="px-2 py-2.5 text-center">ВОК %</th>
-                  <th className="px-2 py-2.5 text-center">Супер +3<br/>ВОК</th>
+                  <th className="px-2 py-2.5 text-center">VOC %</th>
+                  <th className="px-2 py-2.5 text-center">Супер +3<br/>VOC</th>
                   <th className="px-2 py-2.5 text-left">ОС тренера</th>
                   <th className="px-4 py-2.5 text-right">Итог</th>
                 </tr>
@@ -780,7 +780,7 @@ const GradeCard = memo(function GradeCard({
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">ВОК %</span>
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">VOC %</span>
           <input
             type="number" min={0} max={100}
             value={g.vok}
@@ -797,7 +797,7 @@ const GradeCard = memo(function GradeCard({
           <input type="checkbox" checked={g.bonus} disabled={!g.submitted} onChange={(e) => onChange({ bonus: e.target.checked })} className="h-5 w-5 accent-[var(--color-alfa)] disabled:opacity-40" />
         </label>
         <label className="flex items-center justify-between gap-2 rounded-lg sf-1 px-3 py-2 text-sm font-semibold">
-          <span className="leading-tight">Супер&nbsp;+3<br/><span className="text-[11px] text-ink-soft">ВОК</span></span>
+          <span className="leading-tight">Супер&nbsp;+3<br/><span className="text-[11px] text-ink-soft">VOC</span></span>
           <input type="checkbox" checked={g.superBonusVok} disabled={!g.submitted} onChange={(e) => onChange({ superBonusVok: e.target.checked })} className="h-5 w-5 accent-[var(--color-gold)] disabled:opacity-40" />
         </label>
       </div>

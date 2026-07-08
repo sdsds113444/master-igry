@@ -11,7 +11,7 @@
 3. `migration_feedback.sql` — форма обратной связи (`bug_reports`).
 4. `migration_mentor_chat.sql` — канал чата (`channel`) + правка `messages_insert`.
 5. `migration_hardening.sql` — анти-брутфорс, `sender_role`-триггер, уникальность кейсов.
-6. `migration_vok.sql` — второй супер-бонус (ВОК) + актуальный `get_rating`.
+6. `migration_vok.sql` — второй супер-бонус (VOC) + актуальный `get_rating`.
 7. `migration_login_fixes.sql` — **актуальная версия `redeem_code`** (регистронезависимость + анти-брутфорс).
 8. `cases.sql`, `cases-ul.sql` — сиды кейсов.
 9. `migration_hardening_2.sql` — индексы под FK, лимит длины сообщения, `messages.user_id` (аддитивно, безопасно).

@@ -633,7 +633,7 @@ export default function TeamCabinet() {
                         <div className="text-xs font-semibold text-ink-soft">
                           кейсы {s.cases}
                           {s.bonus > 0 && ` · бонус +${s.bonus}`}
-                          {superVok > 0 && ` · супер ВОК +${superVok}`}
+                          {superVok > 0 && ` · супер VOC +${superVok}`}
                         </div>
                       </div>
                       <div className="flex items-center gap-1 text-base font-bold">
