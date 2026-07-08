@@ -258,6 +258,24 @@ export async function removePlayer(teamId: string, rosterId: string): Promise<vo
   throwOn(error)
 }
 
+/** Назначить капитана: снимает флаг со всех остальных и ставит на выбранного —
+ *  капитан всегда один (иначе непонятно, за кем последнее слово при сдаче ответа). */
+export async function setCaptain(teamId: string, rosterId: string): Promise<void> {
+  if (!isSupabaseConfigured) {
+    mockRoster[teamId] = (mockRoster[teamId] ?? []).map((p) => ({ ...p, isCaptain: p.id === rosterId }))
+    return
+  }
+  const sb = requireClient()
+  // Два шага — PostgREST не умеет «SET is_captain = (id = X)» одним запросом.
+  // Сначала снимаем флаг со старого капитана, потом ставим на нового: если второй
+  // шаг упадёт, останется временно без капитана — не идеально, но не ломает данные
+  // (лучше, чем обратный порядок, при котором могли бы получиться два капитана разом).
+  const { error: e1 } = await sb.from('roster').update({ is_captain: false }).eq('team_id', teamId).eq('is_captain', true)
+  throwOn(e1)
+  const { error: e2 } = await sb.from('roster').update({ is_captain: true }).eq('team_id', teamId).eq('id', rosterId)
+  throwOn(e2)
+}
+
 // =====================================================================
 // ЧАТ (realtime)
 // =====================================================================

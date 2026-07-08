@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Play, FileDown, Upload, Send, MessageCircle, CheckCircle2, Clock,
-  UserPlus, X, MessageSquare, Loader2, Pencil, ChevronDown,
+  UserPlus, X, MessageSquare, Loader2, Pencil, ChevronDown, Crown,
 } from 'lucide-react'
 import {
   GAME_VIDEO, GAME_FILE,
@@ -11,7 +11,7 @@ import {
 import {
   getMyTeam, listTeamsRating, getRoster, addPlayer as dbAddPlayer, removePlayer as dbRemovePlayer,
   getCases, getScores, getSubmission, submitAnswer, getGames, pickCurrentGame,
-  getMentorLatestFromTrainer, getMentorSeen, markMentorSeen,
+  getMentorLatestFromTrainer, getMentorSeen, markMentorSeen, setCaptain as dbSetCaptain,
   type TeamInfo, type RosterMember,
 } from '../lib/db'
 
@@ -165,6 +165,19 @@ export default function TeamCabinet() {
     } catch {
       setRoster(prev) // откат: возвращаем игрока в список
       setRosterError('Не удалось убрать игрока — попробуйте ещё раз.')
+    }
+  }
+
+  async function makeCaptain(member: RosterMember) {
+    if (!me || member.isCaptain) return
+    const prev = roster
+    setRosterError('')
+    setRoster((r) => r.map((p) => ({ ...p, isCaptain: p.id === member.id })))
+    try {
+      await dbSetCaptain(me.id, member.id)
+    } catch {
+      setRoster(prev) // откат
+      setRosterError('Не удалось назначить капитана — попробуйте ещё раз.')
     }
   }
 
@@ -546,14 +559,24 @@ export default function TeamCabinet() {
                       <Icon3D name="crown" className="h-7 w-7 object-contain drop-shadow-sm" />
                     </span>
                   ) : (
-                    <button
-                      onClick={() => removePlayer(p)}
-                      aria-label={`Убрать игрока ${p.name}`}
-                      title="Убрать игрока"
-                      className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa focus-visible:bg-alfa/10 focus-visible:text-alfa"
-                    >
-                      <X size={16} />
-                    </button>
+                    <>
+                      <button
+                        onClick={() => makeCaptain(p)}
+                        aria-label={`Сделать капитаном ${p.name}`}
+                        title="Сделать капитаном"
+                        className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa focus-visible:bg-alfa/10 focus-visible:text-alfa"
+                      >
+                        <Crown size={16} />
+                      </button>
+                      <button
+                        onClick={() => removePlayer(p)}
+                        aria-label={`Убрать игрока ${p.name}`}
+                        title="Убрать игрока"
+                        className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa focus-visible:bg-alfa/10 focus-visible:text-alfa"
+                      >
+                        <X size={16} />
+                      </button>
+                    </>
                   )}
                 </li>
               ))}

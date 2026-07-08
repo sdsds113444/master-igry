@@ -1,11 +1,11 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Megaphone, RefreshCw, Check, Trophy, Loader2, MessageCircle, Bug, HelpCircle, Lightbulb, Eye, CheckCheck, FileText, Download } from 'lucide-react'
+import { Megaphone, RefreshCw, Check, Trophy, Loader2, MessageCircle, Bug, HelpCircle, Lightbulb, Eye, CheckCheck, FileText, Download, Users, Crown } from 'lucide-react'
 import { type Game } from '../data/mock'
 import {
   listAllTeamsAdmin, getScoresForGame, gradeMany, getGames, publishGame, pickCurrentGame,
   getAnswersForGame, getAnswerFileUrl, listMentorLatestFromTeams, getMentorSeen, markMentorSeen,
-  listFeedback, setFeedbackStatus, type AdminTeamRow, type FeedbackRow,
+  getRoster, listFeedback, setFeedbackStatus, type AdminTeamRow, type FeedbackRow, type RosterMember,
 } from '../lib/db'
 
 /** Короткий «пинг» через WebAudio (без ассета) — сигнал тренеру о новом сообщении.
@@ -66,6 +66,7 @@ export default function Admin() {
   // Ответы команд по выбранной игре (текст + путь к файлу) — источник «сдал/не сдал» и просмотра.
   const [answers, setAnswers] = useState<Record<string, { answer: string; filePath: string | null }>>({})
   const [viewTeam, setViewTeam] = useState<AdminTeamRow | null>(null)
+  const [rosterTeam, setRosterTeam] = useState<AdminTeamRow | null>(null) // «провалиться» и посмотреть состав
   // «Пипочка»: по каждой команде — время последнего сообщения от неё в чате с тренером.
   const [mentorLatest, setMentorLatest] = useState<Record<string, number>>({})
   const [seenTick, setSeenTick] = useState(0) // форс-пересчёт непрочитанного после «прочитано»
@@ -337,6 +338,7 @@ export default function Admin() {
                     onUpd={upd}
                     onChat={openTeamChat}
                     onView={setViewTeam}
+                    onRoster={setRosterTeam}
                   />
                 ))}
               </tbody>
@@ -355,6 +357,7 @@ export default function Admin() {
                 onUpd={upd}
                 onChat={openTeamChat}
                 onView={setViewTeam}
+                onRoster={setRosterTeam}
               />
             ))}
           </div>
@@ -397,8 +400,54 @@ export default function Admin() {
         onClose={() => setViewTeam(null)}
       />
 
+      <RosterView team={rosterTeam} onClose={() => setRosterTeam(null)} />
+
       <FeedbackPanel />
     </div>
+  )
+}
+
+/** Просмотр состава команды тренером: имена + отметка капитана (read-only). */
+function RosterView({ team, onClose }: { team: AdminTeamRow | null; onClose: () => void }) {
+  const [roster, setRoster] = useState<RosterMember[] | null>(null)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    if (!team) { setRoster(null); return }
+    let cancelled = false
+    setRoster(null)
+    setError(false)
+    getRoster(team.id)
+      .then((r) => { if (!cancelled) setRoster(r) })
+      .catch(() => { if (!cancelled) setError(true) })
+    return () => { cancelled = true }
+  }, [team])
+
+  return (
+    <Dialog
+      open={!!team}
+      onClose={onClose}
+      ariaLabel={`Состав команды ${team?.name ?? ''}`}
+      panelClassName="w-full max-w-sm"
+      title={<><Users size={17} className="shrink-0 text-alfa" /> <span className="truncate">Состав — {team?.name}</span></>}
+    >
+      <div className="max-h-[70vh] space-y-1.5 overflow-auto p-4 pt-2">
+        {error && <p className="rounded-2xl sf-1 p-4 text-center text-sm font-semibold text-danger">Не удалось загрузить состав.</p>}
+        {!error && roster === null && (
+          <div className="grid h-24 place-items-center text-ink-soft"><Loader2 className="animate-spin" /></div>
+        )}
+        {!error && roster !== null && roster.length === 0 && (
+          <p className="rounded-2xl sf-1 p-4 text-center text-sm text-ink-soft">Команда ещё не добавила участников.</p>
+        )}
+        {!error && roster?.map((p) => (
+          <div key={p.id} className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 sf-hoversoft">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full sf-2 text-xs font-bold">{p.name.slice(0, 1)}</span>
+            <span className="flex-1 truncate text-sm font-semibold">{p.name}</span>
+            {p.isCaptain && <Crown size={16} className="shrink-0 text-[var(--color-gold)]" aria-label="Капитан" />}
+          </div>
+        ))}
+      </div>
+    </Dialog>
   )
 }
 
@@ -550,7 +599,7 @@ function FeedbackPanel() {
  *  команда, чей grade изменился, а не все ~30 строк на каждый ввод символа. Опирается
  *  на СТАБИЛЬНЫЕ пропсы onUpd/onChat/onView (см. useCallback/setState в Admin). */
 const GradeRowDesktop = memo(function GradeRowDesktop({
-  t, g, hasAnswer, unread, onUpd, onChat, onView,
+  t, g, hasAnswer, unread, onUpd, onChat, onView, onRoster,
 }: {
   t: AdminTeamRow
   g: Grade
@@ -559,6 +608,7 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
   onUpd: (id: string, patch: Partial<Grade>) => void
   onChat: (t: AdminTeamRow) => void
   onView: (t: AdminTeamRow) => void
+  onRoster: (t: AdminTeamRow) => void
 }) {
   const sum = gradeTotal(g)
   const onChange = (patch: Partial<Grade>) => onUpd(t.id, patch)
@@ -573,6 +623,14 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
             <div className="truncate font-bold">{t.name}</div>
             <div className="text-xs text-ink-soft">{t.code} · {t.site}</div>
           </div>
+          <button
+            onClick={() => onRoster(t)}
+            aria-label={`Состав команды ${t.name}`}
+            title="Состав команды"
+            className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa"
+          >
+            <Users size={16} />
+          </button>
           <button
             onClick={() => onView(t)}
             disabled={!hasAnswer}
@@ -641,7 +699,7 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
 
 /** Карточка оценивания одной команды для мобильной раскладки (замена строки таблицы). */
 const GradeCard = memo(function GradeCard({
-  t, g, hasAnswer, unread, onUpd, onChat, onView,
+  t, g, hasAnswer, unread, onUpd, onChat, onView, onRoster,
 }: {
   t: AdminTeamRow
   g: Grade
@@ -650,6 +708,7 @@ const GradeCard = memo(function GradeCard({
   onUpd: (id: string, patch: Partial<Grade>) => void
   onChat: (t: AdminTeamRow) => void
   onView: (t: AdminTeamRow) => void
+  onRoster: (t: AdminTeamRow) => void
 }) {
   const sum = gradeTotal(g)
   const onChange = (patch: Partial<Grade>) => onUpd(t.id, patch)
@@ -672,6 +731,14 @@ const GradeCard = memo(function GradeCard({
           <div className="text-xs font-semibold text-ink-soft">Итог</div>
           <div className="text-lg font-bold leading-none">{sum}</div>
         </div>
+        <button
+          onClick={() => onRoster(t)}
+          aria-label={`Состав команды ${t.name}`}
+          title="Состав команды"
+          className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa"
+        >
+          <Users size={16} />
+        </button>
         <button
           onClick={() => onView(t)}
           disabled={!hasAnswer}
