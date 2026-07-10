@@ -119,6 +119,32 @@ export default function TeamCabinet() {
     return () => { stopped = true; window.clearInterval(timer); window.removeEventListener('focus', check) }
   }, [me])
 
+  // Тихо обновляем место/очки/оценки при возврате на вкладку и по таймеру (как на доске) —
+  // иначе после проверки тренером кабинет показывал бы устаревшие данные до перезагрузки.
+  useEffect(() => {
+    if (!me) return
+    let refreshing = false
+    async function refresh() {
+      if (document.visibilityState !== 'visible' || refreshing) return
+      refreshing = true
+      try {
+        const [rating, s] = await Promise.all([listTeamsRating(), getScores(me!.id)])
+        const mine = rating.find((x) => x.id === me!.id)
+        setRank(mine?.rank ?? 1)
+        setTotal(mine?.total ?? 0)
+        setScores(s)
+      } catch { /* фоновое обновление — тихо */ } finally { refreshing = false }
+    }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    const timer = window.setInterval(refresh, 4 * 60 * 1000)
+    return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+      window.clearInterval(timer)
+    }
+  }, [me])
+
   // Открыть чат с тренером: помечаем прочитанным и гасим точку.
   function openMentorChat() {
     if (me) markMentorSeen(me.id)

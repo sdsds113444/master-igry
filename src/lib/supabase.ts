@@ -68,7 +68,10 @@ function resolveTransport(): Promise<Transport> {
         signal: ctrl.signal,
       })
       window.clearTimeout(timer)
-      setTransport(res.ok ? 'direct' : 'proxy')
+      // Любой HTTP-ответ (даже 5xx/429) доказывает, что supabase.co СЕТЕВО доступен —
+      // реальную блокировку операторов ловит catch (обрыв/таймаут). На прокси уводим
+      // только при 5xx: транзиентную деградацию backend прокси не лечит (тот же backend).
+      setTransport(res.status < 500 ? 'direct' : 'proxy')
     } catch {
       setTransport('proxy')
     }

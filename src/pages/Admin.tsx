@@ -98,6 +98,7 @@ export default function Admin() {
     async function load() {
       setLoading(true)
       setSaveError('')
+      setLoadError(false) // транзиентный сбой при переключении игры не должен навсегда ронять всю панель
       try {
         const [scores, ans] = await Promise.all([
           getScoresForGame(gameId), getAnswersForGame(gameId),
@@ -286,7 +287,7 @@ export default function Admin() {
 
           <button
             onClick={publish}
-            disabled={publishing || !gameId || (isPublished && !publishing)}
+            disabled={publishing || !gameId || published || isPublished}
             className="btn-alfa ml-auto flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-bold disabled:opacity-60"
           >
             {publishing
@@ -458,14 +459,23 @@ function AnswerView({ team, data, onClose }: {
   onClose: () => void
 }) {
   const [downloading, setDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState('')
   const fileName = data?.filePath ? basename(data.filePath) : null
+
+  // Сбрасываем ошибку при смене команды: AnswerView остаётся смонтированным между
+  // открытиями (условен только Dialog внутри), иначе прошлая ошибка висела бы над новым ответом.
+  useEffect(() => { setDownloadError('') }, [team])
 
   async function download() {
     if (!data?.filePath || downloading) return
     setDownloading(true)
+    setDownloadError('')
     try {
       const url = await getAnswerFileUrl(data.filePath)
       if (url) window.open(url, '_blank', 'noopener')
+      else setDownloadError('Не удалось получить ссылку на файл. Попробуйте ещё раз.')
+    } catch {
+      setDownloadError('Не удалось скачать файл. Проверьте соединение и попробуйте ещё раз.')
     } finally {
       setDownloading(false)
     }
@@ -493,6 +503,7 @@ function AnswerView({ team, data, onClose }: {
             <span className="truncate">Скачать файл: {fileName}</span>
           </button>
         )}
+        {downloadError && <p className="text-sm font-semibold text-danger" role="alert">{downloadError}</p>}
       </div>
     </Dialog>
   )
@@ -655,8 +666,10 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
         <input
           type="checkbox"
           checked={g.submitted}
+          disabled={hasAnswer}
+          title={hasAnswer ? 'Команда сдала ответ — снять нельзя (иначе сохранение обнулило бы её оценку)' : undefined}
           onChange={(e) => onChange({ submitted: e.target.checked })}
-          className="h-5 w-5 accent-[var(--color-alfa)]"
+          className="h-5 w-5 accent-[var(--color-alfa)] disabled:cursor-not-allowed"
         />
       </td>
       <td className="px-2 text-center">
@@ -763,8 +776,10 @@ const GradeCard = memo(function GradeCard({
         <input
           type="checkbox"
           checked={g.submitted}
+          disabled={hasAnswer}
+          title={hasAnswer ? 'Команда сдала ответ — снять нельзя (иначе сохранение обнулило бы её оценку)' : undefined}
           onChange={(e) => onChange({ submitted: e.target.checked })}
-          className="h-5 w-5 accent-[var(--color-alfa)]"
+          className="h-5 w-5 accent-[var(--color-alfa)] disabled:cursor-not-allowed"
         />
       </label>
 
