@@ -31,7 +31,7 @@ import MentorChatModal from '../components/MentorChatModal'
 import Dialog from '../components/Dialog'
 import ErrorCard from '../components/ErrorCard'
 import { teamAvatar, basename } from '../lib/ui'
-import { gradeTotal, BONUS_POINTS, SUPER_BONUS_VOK_POINTS } from '../lib/scoring'
+import { gradeTotal, scoreWrite } from '../lib/scoring'
 
 /** Целое число из поля ввода: защита от NaN и дробей, зажим в [0, max]. */
 function clampNum(raw: string, max: number): number {
@@ -194,21 +194,11 @@ export default function Admin() {
     setSaving(true)
     setSaveError('')
     try {
-      // Один пакетный upsert вместо 30 отдельных запросов.
+      // Один пакетный upsert вместо 30 отдельных запросов. Маппинг «строка оценивания →
+      // очки» вынесен в scoreWrite (scoring.ts) и покрыт тестами: «не сдала» обнуляет
+      // всю строку (в т.ч. vok/feedback), «сдала» переводит галочки в веса.
       await gradeMany(
-        teams.map((t) => {
-          const g = grades[t.id]
-          // Не сдала → строка полностью обнуляется (в т.ч. vok/feedback), чтобы
-          // не оставалось «висящих» процентов/комментария при снятой галочке «сдала».
-          return {
-            teamId: t.id, gameId,
-            cases: g.submitted ? g.cases : 0,
-            bonus: g.submitted && g.bonus ? BONUS_POINTS : 0,
-            vok: g.submitted ? g.vok : 0,
-            superBonusVok: g.submitted && g.superBonusVok ? SUPER_BONUS_VOK_POINTS : 0,
-            feedback: g.submitted ? g.feedback : '',
-          }
-        }),
+        teams.map((t) => ({ teamId: t.id, gameId, ...scoreWrite(grades[t.id]) })),
       )
       setSaved(true)
       setDirty(false)

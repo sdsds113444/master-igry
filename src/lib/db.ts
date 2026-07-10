@@ -50,7 +50,7 @@ function readMeContext(): MeContext {
 /** «Это моё сообщение?» — по стабильному auth-id, а не по совпадению подписи.
  *  Тренер (админ) считает своими сообщения с ролью admin; игрок — свои по user_id
  *  (падает на сравнение по подписи только для старых сообщений без user_id). */
-function computeMe(ctx: MeContext, author: string, role: Role, userId?: string | null): boolean {
+export function computeMe(ctx: MeContext, author: string, role: Role, userId?: string | null): boolean {
   if (ctx.isAdmin) return role === 'admin'
   if (role === 'admin') return false
   if (ctx.uid && userId) return userId === ctx.uid

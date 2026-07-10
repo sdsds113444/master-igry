@@ -15,6 +15,7 @@ export function rankTier(rank: number, total = 30): RankTier {
 /** Прогресс «насколько близко к 1-му месту», в процентах: 1-е место → 100%,
  *  последнее (total-е) → 0%. Для прогресс-бара рядом с местом. */
 export function rankPercent(rank: number, total = 30): number {
+  if (total <= 1) return 100 // одна команда (вырожденный случай) — без деления на ноль → NaN
   const r = Math.min(total, Math.max(1, rank))
   return Math.round(((total - r) / (total - 1)) * 100)
 }

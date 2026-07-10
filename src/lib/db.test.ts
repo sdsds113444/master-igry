@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pickCurrentGame, normalizeCode } from './db'
+import { pickCurrentGame, normalizeCode, computeMe } from './db'
 import type { Game } from '../data/mock'
 
 describe('normalizeCode (устойчивость к мобильным клавиатурам)', () => {
@@ -44,5 +44,26 @@ describe('pickCurrentGame', () => {
   })
   it('на пустом списке возвращает null (без TypeError у вызывающих)', () => {
     expect(pickCurrentGame([])).toBeNull()
+  })
+})
+
+describe('computeMe (моё/чужое сообщение)', () => {
+  const admin = { isAdmin: true, uid: 'a1', displayName: null }
+  const player = { isAdmin: false, uid: 'u1', displayName: 'Аня' }
+
+  it('админ считает своими только admin-сообщения', () => {
+    expect(computeMe(admin, 'Тренер', 'admin', 'a1')).toBe(true)
+    expect(computeMe(admin, 'Аня', 'player', 'u9')).toBe(false)
+  })
+  it('для игрока admin-сообщение всегда чужое', () => {
+    expect(computeMe(player, 'Тренер', 'admin', 'x')).toBe(false)
+  })
+  it('игрок: своё по стабильному user_id, а не по подписи', () => {
+    expect(computeMe(player, 'кто угодно', 'player', 'u1')).toBe(true)
+    expect(computeMe(player, 'Аня', 'player', 'u2')).toBe(false) // тёзка, другой uid
+  })
+  it('legacy без user_id → фолбэк по подписи (тёзки помечаются своими)', () => {
+    expect(computeMe(player, 'Аня', 'player', null)).toBe(true)
+    expect(computeMe(player, 'Боря', 'player', null)).toBe(false)
   })
 })

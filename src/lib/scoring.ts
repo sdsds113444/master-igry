@@ -42,3 +42,34 @@ export function gradeTotal(g: GradeParts): number {
     superBonusVok: g.superBonusVok ? SUPER_BONUS_VOK_POINTS : 0,
   })
 }
+
+/** Полная строка оценивания в админке (чекбоксы + числа + текст ОС). */
+export interface GradeFormRow {
+  submitted: boolean
+  cases: number
+  bonus: boolean
+  vok: number
+  superBonusVok: boolean
+  feedback: string
+}
+/** Очки, реально записываемые в scores. */
+export interface ScoreWrite {
+  cases: number
+  bonus: number
+  vok: number
+  superBonusVok: number
+  feedback: string
+}
+/** Перевод строки оценивания → запись в scores. «Не сдала» обнуляет ВСЮ строку
+ *  (включая vok/feedback), «сдала» переводит галочки в веса. Вынесено из saveAll
+ *  (Admin.tsx), чтобы путь записи в рейтинг покрывался тестами и совпадал с gradeTotal. */
+export function scoreWrite(g: GradeFormRow): ScoreWrite {
+  if (!g.submitted) return { cases: 0, bonus: 0, vok: 0, superBonusVok: 0, feedback: '' }
+  return {
+    cases: g.cases,
+    bonus: g.bonus ? BONUS_POINTS : 0,
+    vok: g.vok,
+    superBonusVok: g.superBonusVok ? SUPER_BONUS_VOK_POINTS : 0,
+    feedback: g.feedback,
+  }
+}
