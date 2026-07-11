@@ -61,11 +61,13 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
           </div>
         ) : (
           <form onSubmit={send} className="space-y-3">
-            <div className="flex gap-2">
+            <div className="flex gap-2" role="radiogroup" aria-label="Тип отзыва">
               {CATS.map((c) => (
                 <button
                   key={c.id}
                   type="button"
+                  role="radio"
+                  aria-checked={category === c.id}
                   onClick={() => setCategory(c.id)}
                   className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-bold transition-colors ${
                     category === c.id ? 'bg-alfa text-white' : 'sf-2 text-ink-soft sf-hover'
@@ -77,13 +79,21 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
             </div>
 
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-ink-soft">Что делали? *</span>
+              <span className="mb-1 block text-xs font-semibold text-ink-soft">
+                {category === 'bug' ? 'Что делали? *' : category === 'question' ? 'Ваш вопрос *' : 'Ваша идея *'}
+              </span>
               <textarea
                 value={did}
                 onChange={(e) => setDid(e.target.value)}
                 rows={2}
                 required
-                placeholder="Например: зашёл в кабинет, нажал «Отправить тренеру»…"
+                placeholder={
+                  category === 'bug'
+                    ? 'Например: зашёл в кабинет, нажал «Отправить тренеру»…'
+                    : category === 'question'
+                      ? 'Например: как сменить капитана команды?'
+                      : 'Например: показать таймер до дедлайна на доске.'
+                }
                 className="field w-full resize-none p-3 text-sm outline-none"
               />
             </label>
@@ -117,7 +127,7 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
                 value={device}
                 onChange={(e) => setDevice(e.target.value)}
                 placeholder="iPhone, Safari / ПК, Chrome"
-                className="w-full rounded-xl border border-black/5 sf-2 px-3 py-2 text-sm outline-none focus:border-alfa/40"
+                className="field w-full px-3 py-2 text-sm outline-none"
               />
             </label>
 

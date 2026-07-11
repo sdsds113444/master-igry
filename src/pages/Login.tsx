@@ -108,7 +108,7 @@ export default function Login() {
                 <KeyRound size={18} className="text-ink-soft" />
                 <input
                   value={code}
-                  onChange={(e) => setCode(normalizeCode(e.target.value))}
+                  onChange={(e) => { setCode(normalizeCode(e.target.value)); if (error) setError('') }}
                   placeholder="KOYA-04"
                   // мобильные клавиатуры: без автозамены/автокапитализации/умной пунктуации,
                   // чтобы код не искажался (частая причина «код не найден» на телефоне)
@@ -143,7 +143,7 @@ export default function Login() {
           <p className="mt-5 rounded-xl sf-1 px-3 py-2 text-center text-xs text-ink-soft">
             {isSupabaseConfigured
               ? <>Код команды выдаёт организатор. Нет кода — напишите тренеру.</>
-              : <>Демо-режим: любой код открывает доску, <b>{MOCK_ADMIN_CODE}</b> — админку.</>}
+              : <>Демо-режим: код команды (напр. <b>KOYA-04</b>) открывает доску, <b>{MOCK_ADMIN_CODE}</b> — админку.</>}
           </p>
         </div>
       </div>

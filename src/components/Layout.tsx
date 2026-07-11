@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Link, Outlet, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Users, ShieldCheck, LogOut, BookOpen, MessageSquarePlus } from 'lucide-react'
 import Background from './Background'
 import ThemeToggle from './ThemeToggle'
@@ -30,7 +30,11 @@ export default function Layout() {
       {/* Верхняя навигация */}
       <header className="sticky top-0 z-40 px-4 pt-4">
         <nav className="glass-strong mx-auto flex max-w-6xl items-center gap-3 rounded-full px-3 py-2">
-          <div className="flex items-center gap-2.5 pl-1 sm:pr-3">
+          <Link
+            to={session?.role === 'admin' ? '/admin' : '/board'}
+            aria-label="На главную"
+            className="flex items-center gap-2.5 rounded-full pl-1 transition-opacity hover:opacity-80 sm:pr-3"
+          >
             <img src="/koya-favicon.svg" alt="КОЯ" className="h-9 w-9 drop-shadow" />
             <div className="hidden leading-tight sm:block">
               <div className="text-base font-bold tracking-tight">
@@ -38,7 +42,7 @@ export default function Layout() {
               </div>
               <div className="text-xs font-semibold text-ink-soft">Альфа · КЦ</div>
             </div>
-          </div>
+          </Link>
 
           <div className="mx-auto flex items-center gap-1">
             {session?.role !== 'admin' && (
@@ -50,7 +54,7 @@ export default function Layout() {
                     `${linkBase} ${isActive ? 'bg-alfa text-white shadow' : 'text-ink sf-hoversoft'}`
                   }
                 >
-                  <LayoutDashboard size={16} /> <span className="hidden md:inline">Доска</span>
+                  <LayoutDashboard size={16} /> <span className="hidden lg:inline">Доска</span>
                 </NavLink>
                 <NavLink
                   to="/team"
@@ -59,7 +63,7 @@ export default function Layout() {
                     `${linkBase} ${isActive ? 'bg-alfa text-white shadow' : 'text-ink sf-hoversoft'}`
                   }
                 >
-                  <Users size={16} /> <span className="hidden md:inline">Кабинет&nbsp;команды</span>
+                  <Users size={16} /> <span className="hidden lg:inline">Кабинет&nbsp;команды</span>
                 </NavLink>
                 <NavLink
                   to="/rules"
@@ -68,7 +72,7 @@ export default function Layout() {
                     `${linkBase} ${isActive ? 'bg-alfa text-white shadow' : 'text-ink sf-hoversoft'}`
                   }
                 >
-                  <BookOpen size={16} /> <span className="hidden md:inline">Правила</span>
+                  <BookOpen size={16} /> <span className="hidden lg:inline">Правила</span>
                 </NavLink>
               </>
             )}
@@ -80,7 +84,7 @@ export default function Layout() {
                   `${linkBase} ${isActive ? 'bg-alfa text-white shadow' : 'text-ink sf-hoversoft'}`
                 }
               >
-                <ShieldCheck size={16} /> <span className="hidden md:inline">Админ</span>
+                <ShieldCheck size={16} /> <span className="hidden lg:inline">Админ</span>
               </NavLink>
             )}
           </div>

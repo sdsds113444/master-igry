@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { Trophy, Flame, Lock, Check, Play, ArrowRight, Clapperboard, Newspaper } from 'lucide-react'
+import { Trophy, Flame, Lock, Check, Play, ArrowRight, Clapperboard, Newspaper, Users } from 'lucide-react'
 import { GAME_VIDEO, START_VIDEO, type Game } from '../data/mock'
 import {
   getSession, listTeamsRating, getGames, listFeed, pickCurrentGame,
@@ -198,7 +198,9 @@ export default function Board() {
 
             <div className="mt-6 flex flex-wrap gap-3">
               <Link to="/team" className="btn-alfa flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold">
-                <Play size={16} /> К заданию недели
+                {seasonStarted
+                  ? <><Play size={16} /> К заданию недели</>
+                  : <><Users size={16} /> Собрать состав команды</>}
               </Link>
               <a
                 href="#rating"
@@ -206,12 +208,8 @@ export default function Board() {
               >
                 <Trophy size={16} /> Смотреть рейтинг
               </a>
-              <button
-                onClick={() => setVideo({ title: 'Стартовый мультик КОЯ', src: START_VIDEO })}
-                className="flex items-center gap-2 rounded-2xl sf-2 px-5 py-3 text-sm font-bold text-ink transition-colors sf-hover"
-              >
-                <Play size={16} /> Вступление
-              </button>
+              {/* Вступительный мультик открывается крупной play-кнопкой поверх маскота —
+                  отдельная текстовая кнопка была дублем того же действия, убрана. */}
             </div>
           </div>
 
@@ -276,8 +274,8 @@ export default function Board() {
 
       {/* ==== МЕСТО В СЕЗОНЕ ==== отдельная компактная карточка (не перекрывает маскота) */}
       {myTeamId && myRating && (() => {
-        const tier = rankTier(myRank)
-        const percent = rankPercent(myRank)
+        const tier = rankTier(myRank, rating.length)
+        const percent = rankPercent(myRank, rating.length)
         return (
           <motion.section
             initial={{ opacity: 0, y: 14 }}
@@ -289,11 +287,11 @@ export default function Board() {
               <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Место в сезоне</div>
               <div className="mt-0.5 flex items-baseline gap-1.5">
                 <span className="font-display text-3xl font-extrabold leading-none">#<CountUp value={myRank} /></span>
-                <span className="text-sm font-bold text-ink-soft">из 30</span>
+                <span className="text-sm font-bold text-ink-soft">из {rating.length}</span>
               </div>
             </div>
             <div className="hidden h-10 w-px bg-black/10 dark:bg-white/15 sm:block" />
-            <div className="flex items-center gap-2 text-sm font-bold" style={{ color: tier.color }}>
+            <div className="flex items-center gap-2 text-sm font-bold" style={{ color: tier.textColor }}>
               <Icon3D name={EMOJI_ICON_3D[tier.emoji]} fallback={tier.emoji} className="h-7 w-7 object-contain drop-shadow-sm" />
               {tier.label}
             </div>
@@ -302,7 +300,7 @@ export default function Board() {
                 <span>Путь к вершине</span>
                 <span>{percent}%</span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
+              <div className="h-2 overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
                 <motion.div
                   className="h-full rounded-full"
                   style={{ background: tier.color }}
@@ -426,7 +424,7 @@ export default function Board() {
                   ? {
                       role: 'button',
                       tabIndex: 0,
-                      'aria-label': `Смотреть ролик — ${f.title}`,
+                      'aria-label': `Смотреть мультик — ${f.title}`,
                       onKeyDown: (e: React.KeyboardEvent) => {
                         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openVideo() }
                       },
@@ -449,7 +447,7 @@ export default function Board() {
                   <p className="mt-0.5 text-sm text-ink-soft">{f.text}</p>
                   <div className="mt-1.5 flex items-center gap-2 text-xs font-semibold text-ink-soft">
                     {f.date}
-                    {f.kind === 'video' && <span className="font-bold text-alfa-ink">▶ Смотреть ролик</span>}
+                    {f.kind === 'video' && <span className="font-bold text-alfa-ink">▶ Смотреть мультик</span>}
                   </div>
                 </div>
               </motion.article>
@@ -464,6 +462,11 @@ export default function Board() {
             <Trophy size={20} className="text-alfa" /> Рейтинг команд
           </h2>
           <div className="glass-strong rounded-3xl p-3">
+            {!rating.some((t) => t.total > 0) && (
+              <p className="px-3 py-2 text-center text-xs text-ink-soft">
+                Рейтинг появится после первой игры — сейчас у всех команд 0 очков.
+              </p>
+            )}
             {rating.slice(0, 8).map((t) => (
               <RatingRowView key={t.id} rank={t.rank} name={t.name} site={t.site} total={t.total} hue={t.hue} me={t.id === myTeamId} />
             ))}
@@ -477,7 +480,7 @@ export default function Board() {
 
             <Link
               to="/team"
-              className="mt-2 flex items-center justify-center gap-1.5 rounded-2xl sf-1 py-2.5 text-sm font-bold text-alfa-ink transition-colors sf-hover"
+              className="mt-2 flex items-center justify-center gap-1.5 rounded-2xl sf-2 py-2.5 text-sm font-bold text-alfa-ink transition-colors sf-hover"
             >
               Мой кабинет <ArrowRight size={15} />
             </Link>
@@ -503,7 +506,9 @@ function StatusBadge({ status }: { status: string }) {
 function RatingRowView({
   rank, name, site, total, hue, me,
 }: { rank: number; name: string; site: string; total: number; hue: number; me?: boolean }) {
-  const medal = rank <= 3
+  // Медаль только у команд с реальными очками: до старта у всех 0 — раздавать
+  // золото/серебро за 0 баллов (по позиции в массиве) вводит в заблуждение.
+  const medal = rank <= 3 && total > 0
   return (
     <div
       className={`flex items-center gap-3 rounded-2xl px-3 py-2.5 ${
@@ -512,7 +517,10 @@ function RatingRowView({
     >
       <div className="grid w-7 shrink-0 place-items-center">
         {medal ? (
-          <Icon3D name={rank === 1 ? 'trophy' : 'medalSilver'} className="h-6 w-6 object-contain drop-shadow-sm" />
+          <>
+            <Icon3D name={rank === 1 ? 'trophy' : 'medalSilver'} className="h-6 w-6 object-contain drop-shadow-sm" />
+            <span className="sr-only">{rank} место</span>
+          </>
         ) : (
           <span className="text-sm font-bold text-ink-soft">{rank}</span>
         )}

@@ -4,12 +4,15 @@
  *  (звёзды путали: воспринимались как оценка 5/5, а не как место в таблице).
  *  Показываем прямо: число места + прогресс-бар «сколько прошли до топа» + короткий
  *  словесный статус. color — акцентный цвет тира (для прогресс-бара/текста). */
-export interface RankTier { emoji: string; label: string; color: string }
+/** color — для полос/иконок (яркий бренд-тон); textColor — для ТЕКСТА статуса, где
+ *  важен контраст (золото как текст на белом ≈1.5:1 → тёмный янтарь; бренд-красный
+ *  как текст → более тёмный alfa-ink). Тёмная тема переопределяет токены сама. */
+export interface RankTier { emoji: string; label: string; color: string; textColor: string }
 export function rankTier(rank: number, total = 30): RankTier {
-  if (rank <= 3) return { emoji: '🏆', label: 'Топ-3 сезона', color: 'var(--color-gold)' }
-  if (rank <= 10) return { emoji: '🔥', label: 'В десятке лучших', color: 'var(--color-alfa)' }
-  if (rank <= Math.ceil(total / 2)) return { emoji: '💪', label: 'Крепкая середина', color: 'var(--color-alfa)' }
-  return { emoji: '📈', label: 'Есть куда расти', color: 'var(--color-ink-soft, #7a8291)' }
+  if (rank <= 3) return { emoji: '🏆', label: 'Топ-3 сезона', color: 'var(--color-gold)', textColor: 'var(--color-status-amber)' }
+  if (rank <= 10) return { emoji: '🔥', label: 'В десятке лучших', color: 'var(--color-alfa)', textColor: 'var(--color-alfa-ink)' }
+  if (rank <= Math.ceil(total / 2)) return { emoji: '💪', label: 'Крепкая середина', color: 'var(--color-alfa)', textColor: 'var(--color-alfa-ink)' }
+  return { emoji: '📈', label: 'Есть куда расти', color: 'var(--color-ink-soft, #7a8291)', textColor: 'var(--color-ink-soft, #7a8291)' }
 }
 
 /** Прогресс «насколько близко к 1-му месту», в процентах: 1-е место → 100%,

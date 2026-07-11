@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Play, FileDown, Upload, Send, MessageCircle, CheckCircle2, Clock,
-  UserPlus, X, MessageSquare, Loader2, Pencil, ChevronDown, Crown,
+  UserPlus, X, MessageSquare, Loader2, Pencil, ChevronDown, Crown, ExternalLink,
 } from 'lucide-react'
 import {
   GAME_VIDEO, GAME_FILE,
@@ -32,6 +32,7 @@ export default function TeamCabinet() {
   const [loadError, setLoadError] = useState(false)
   const [rank, setRank] = useState(1)
   const [total, setTotal] = useState(0)
+  const [teamsCount, setTeamsCount] = useState(30) // фактическое число команд — для границ тира/процента
 
   const [videoOpen, setVideoOpen] = useState(false)
   const [mentorChatOpen, setMentorChatOpen] = useState(false)
@@ -67,25 +68,27 @@ export default function TeamCabinet() {
         if (!team) { setLoading(false); return }
 
         const cur = pickCurrentGame(gs)
-        if (!cur) { setGames(gs); setCurrent(null); setLoading(false); return }
-
-        const [rating, r, c, s, sub] = await Promise.all([
+        // Состав, рейтинг и баллы НЕ зависят от текущей игры — грузим их всегда, в том
+        // числе в пресезоне (капитан регистрирует состав именно до старта). Кейсы и ранее
+        // сданный ответ есть только у активной игры, поэтому их тянем условно.
+        const [rating, r, s, c, sub] = await Promise.all([
           listTeamsRating(),
           getRoster(team.id),
-          getCases(cur.id),
           getScores(team.id),
-          getSubmission(team.id, cur.id),
+          cur ? getCases(cur.id) : Promise.resolve([]),
+          cur ? getSubmission(team.id, cur.id) : Promise.resolve(null),
         ])
         if (cancelled) return
 
         const mine = rating.find((x) => x.id === team.id)
         setRank(mine?.rank ?? 1)
         setTotal(mine?.total ?? 0)
+        setTeamsCount(rating.length || 30)
         setGames(gs)
         setCurrent(cur)
         setRoster(r)
-        setCases(c)
         setScores(s)
+        setCases(c)
         if (sub) { setAnswer(sub.answer); setFileAttached(sub.fileName); setSent(true) }
         // sub.filePath — путь к ранее загруженному файлу; новый файл (file) заменит его
 
@@ -132,6 +135,7 @@ export default function TeamCabinet() {
         const mine = rating.find((x) => x.id === me!.id)
         setRank(mine?.rank ?? 1)
         setTotal(mine?.total ?? 0)
+        setTeamsCount(rating.length || 30)
         setScores(s)
       } catch { /* фоновое обновление — тихо */ } finally { refreshing = false }
     }
@@ -152,8 +156,8 @@ export default function TeamCabinet() {
     setMentorChatOpen(true)
   }
 
-  const tier = rankTier(rank)
-  const rankProgress = rankPercent(rank)
+  const tier = rankTier(rank, teamsCount)
+  const rankProgress = rankPercent(rank, teamsCount)
 
   async function addPlayer(e: React.FormEvent) {
     e.preventDefault()
@@ -162,6 +166,11 @@ export default function TeamCabinet() {
     setRosterError('')
     if (roster.length >= ROSTER_LIMIT) {
       setRosterError(`В команде максимум ${ROSTER_LIMIT} человек.`)
+      return
+    }
+    // Дубли имён визуально неразличимы (аватар — первая буква) — предупреждаем.
+    if (roster.some((p) => p.name.trim().toLowerCase() === name.toLowerCase())) {
+      setRosterError('Игрок с таким именем уже в составе.')
       return
     }
     // Оптимистично показываем с временным id, затем заменяем на строку из БД
@@ -219,18 +228,20 @@ export default function TeamCabinet() {
       // Реально загружаем файл (если выбран) в Storage и сохраняем ответ.
       const res = await submitAnswer({ teamId: me.id, gameId: current.id, answer, file })
       const hadFile = !!file
-      setFile(null)
-      setSent(true) // помечаем «сдано» СРАЗУ после успешного upsert — не привязываем к
-                    // подтверждающему чтению ниже (оно может моргнуть сетью и дать
-                    // ложную ошибку «не отправился», хотя ответ уже в БД).
-      if (hadFile && !res.fileUploaded) {
-        setSendError('Текст ответа сохранён, но файл пока не удалось прикрепить. Попробуйте прикрепить его чуть позже.')
-      }
-      // Подтверждаем, что реально сохранилось (отдельно: сбой чтения не критичен).
+      // Подтверждаем, что реально сохранилось (сбой чтения не критичен — upsert уже прошёл).
       try {
         const fresh = await getSubmission(me.id, current.id)
         if (fresh) { setAnswer(fresh.answer); setFileAttached(fresh.fileName) }
-      } catch { /* upsert уже прошёл — данные не потеряны */ }
+      } catch { /* данные не потеряны */ }
+      if (hadFile && !res.fileUploaded) {
+        // Текст сохранён, а файл — нет. НЕ показываем зелёный «отправлено» (иначе экран
+        // одновременно «успех» и «ошибка»): держим форму открытой (sent остаётся false),
+        // чтобы капитан прикрепил файл повторно. Текст уже в БД — не потеряется.
+        setSendError('Текст сохранён, но файл не прикрепился. Прикрепите его ещё раз и нажмите «Отправить».')
+        return
+      }
+      setFile(null)
+      setSent(true) // полный успех: текст (и файл, если был) сохранены
     } catch {
       setSendError('Ответ не отправился. Проверьте соединение и попробуйте ещё раз.')
     } finally {
@@ -319,9 +330,10 @@ export default function TeamCabinet() {
             href="https://xlink.achat.best/join/chat/NGM0ODFlNWYtNDU3NS01ZGVlLThiYTctMTgxYTM0YzE5NDE3OjI1MjE3Yzk1LTY3YTYtNTcxYS1hMzM0LWViMDFiZDExY2M2ODo1ODZkMmYxYy04MjA2LTVmM2MtODA4ZC1hOTU2YWFhMjk5ZTg6OWMzMmUzMTctZWUxNi01ZDI1LTlmZGYtODkzNTUxMGM3NmEy"
             target="_blank"
             rel="noreferrer"
+            title="Общий чат площадки в мессенджере — откроется в новой вкладке"
             className="flex items-center gap-2 rounded-2xl sf-2 px-4 py-2.5 text-sm font-bold text-ink transition-colors sf-hover"
           >
-            <MessageCircle size={16} /> Общий чат
+            <MessageCircle size={16} /> Общий чат <ExternalLink size={13} className="opacity-60" />
           </a>
           <button
             onClick={openMentorChat}
@@ -448,7 +460,7 @@ export default function TeamCabinet() {
                   className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl bg-success/10 p-4 text-success"
                   role="status"
                 >
-                  <CheckCircle2 className="shrink-0" /> Ответ отправлен тренеру! Ждите обратную связь в пятницу.
+                  <CheckCircle2 className="shrink-0" /> Ответ отправлен тренеру! Ждите обратную связь.
                   <button
                     onClick={() => setSent(false)}
                     className="ml-auto flex items-center gap-1.5 rounded-xl sf-2 px-3 py-1.5 text-xs font-bold text-ink transition-colors sf-hover"
@@ -468,15 +480,17 @@ export default function TeamCabinet() {
                   className="field mt-3 w-full resize-none p-4 text-sm outline-none"
                 />
                 <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <label className="flex max-w-full cursor-pointer items-center gap-2 rounded-2xl sf-2 px-4 py-2.5 text-sm font-bold transition-colors sf-hover">
+                  <label className="tap flex max-w-full cursor-pointer items-center gap-2 rounded-2xl sf-2 px-4 py-2.5 text-sm font-bold transition-colors sf-hover focus-within:ring-2 focus-within:ring-alfa">
                     <Upload size={16} className="shrink-0" />
                     <span className="truncate">
                       {fileAttached ? fileAttached : 'Прикрепить заполненный файл'}
                     </span>
+                    {/* sr-only (а не hidden/display:none): input остаётся в tab-порядке и
+                        фокусируется с клавиатуры; фокус виден на label через focus-within. */}
                     <input
                       type="file"
                       accept=".xlsx,.xls,.pdf,.doc,.docx"
-                      className="hidden"
+                      className="sr-only"
                       onChange={(e) => {
                         const f = e.target.files?.[0] ?? null
                         // Потолок согласован с запасным каналом /sb (прокси Vercel обрывает
@@ -554,14 +568,14 @@ export default function TeamCabinet() {
                 <div className="font-display text-3xl font-extrabold leading-none">
                   #{rank}
                 </div>
-                <div className="mt-1.5 flex items-center gap-1.5 text-sm font-bold" style={{ color: tier.color }}>
+                <div className="mt-1.5 flex items-center gap-1.5 text-sm font-bold" style={{ color: tier.textColor }}>
                   <Icon3D name={EMOJI_ICON_3D[tier.emoji]} fallback={tier.emoji} className="h-5 w-5 object-contain drop-shadow-sm" /> {tier.label}
                 </div>
                 <div className="mt-2 h-2 w-full max-w-[140px] overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
                   <div className="h-full rounded-full transition-[width]" style={{ width: `${rankProgress}%`, background: tier.color }} />
                 </div>
                 <div className="mt-1 text-xs font-semibold text-ink-soft">
-                  из 30 команд
+                  из {teamsCount} команд
                 </div>
               </div>
             </div>
@@ -671,7 +685,7 @@ export default function TeamCabinet() {
                       <div className="mt-2 flex gap-2 rounded-xl sf-2 p-2.5">
                         <MessageCircle size={14} className="mt-0.5 shrink-0 text-alfa" />
                         <div className="text-xs text-ink-soft">
-                          <b className="text-ink">ОС тренера:</b> {s.feedback}
+                          <b className="text-ink">Комментарий тренера:</b> {s.feedback}
                         </div>
                       </div>
                     )}

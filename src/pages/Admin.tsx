@@ -182,6 +182,16 @@ export default function Admin() {
     setDirty(true)
   }, [])
 
+  // Пока есть несохранённые баллы — предупреждаем при обновлении/закрытии вкладки
+  // (главный вектор случайной потери: оценивание — самая трудоёмкая операция).
+  // Смену игры внутри страницы уже страхует changeGame() ниже.
+  useEffect(() => {
+    if (!dirty) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [dirty])
+
   // Смена игры при несохранённых правках: эффект по gameId безусловно перезатирает
   // grades серверными данными — без подтверждения ввод по 30 командам пропал бы молча.
   function changeGame(nextId: string) {
@@ -211,6 +221,9 @@ export default function Admin() {
 
   async function publish() {
     if (!gameId || publishing) return
+    // Публикация необратима: игра открывается всем 30 командам + пишется запись в ленту.
+    const g = games.find((x) => x.id === gameId)
+    if (!window.confirm(`Выложить «${g?.title ?? 'задание'}» на доску всем командам? Текущее задание недели сменится, отменить нельзя.`)) return
     setPublishing(true)
     setSaveError('')
     try {
@@ -261,11 +274,11 @@ export default function Admin() {
       <div className="glass rounded-glass p-5">
         <div className="flex flex-wrap items-end gap-4">
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">Игра недели</span>
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">Игра сезона</span>
             <select
               value={gameId}
               onChange={(e) => changeGame(e.target.value)}
-              className="rounded-2xl border border-black/5 sf-2 px-4 py-2.5 text-sm font-bold outline-none focus:border-alfa/40"
+              className="field px-4 py-2.5 text-sm font-bold outline-none"
             >
               {games.map((g) => (
                 <option key={g.id} value={g.id}>
@@ -291,7 +304,7 @@ export default function Admin() {
 
       {/* Таблица оценивания */}
       <div className="glass-strong overflow-hidden rounded-glass">
-        <div className="flex items-center justify-between border-b border-black/5 px-5 py-4">
+        <div className="flex flex-col gap-1.5 border-b border-black/5 px-5 py-4 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
           <h2 className="font-display text-xl font-bold">Оценивание команд</h2>
           <div className="text-xs font-semibold text-ink-soft">
             Оценка за кейсы (общая, 0–3): 0 — не сдал · 1 — &gt;3 ошибок · 2 — &lt;3 ошибок · 3 — без ошибок
@@ -299,12 +312,12 @@ export default function Admin() {
         </div>
 
         {loading ? (
-          <div className="grid h-40 place-items-center text-ink-soft">
-            <Loader2 className="animate-spin" />
+          <div className="grid h-40 place-items-center text-ink-soft" role="status" aria-live="polite">
+            <Loader2 className="animate-spin" /><span className="sr-only">Загружаю команды…</span>
           </div>
         ) : (
           <>
-          <div className="hidden max-h-[540px] overflow-auto md:block">
+          <div className="hidden max-h-[540px] overflow-auto lg:block">
             <table className="w-full min-w-[900px] text-sm">
               <thead className="sticky top-0 z-10 sf-3 backdrop-blur">
                 <tr className="text-left text-xs font-semibold uppercase tracking-wide text-ink-soft">
@@ -312,8 +325,8 @@ export default function Admin() {
                   <th className="px-2 py-2.5 text-center">Сдала</th>
                   <th className="px-2 py-2.5 text-center">Очки за кейсы</th>
                   <th className="px-2 py-2.5 text-center">Бонус +1<br/><span className="font-normal normal-case text-[10px]">за нестандартное решение кейса</span></th>
-                  <th className="px-2 py-2.5 text-center">VOC %</th>
-                  <th className="px-2 py-2.5 text-center">Супер +3<br/>VOC</th>
+                  <th className="px-2 py-2.5 text-center">VOC %<br/><span className="font-normal normal-case text-[10px]">справочно, в «Итог» не идёт</span></th>
+                  <th className="px-2 py-2.5 text-center">Супер +3<br/>VOC<br/><span className="font-normal normal-case text-[10px]">+3 балла за лучший VOC</span></th>
                   <th className="px-2 py-2.5 text-left">ОС тренера</th>
                   <th className="px-4 py-2.5 text-right">Итог</th>
                 </tr>
@@ -336,8 +349,9 @@ export default function Admin() {
             </table>
           </div>
 
-          {/* Мобильная раскладка: каждая команда — карточка со столбиком полей */}
-          <div className="space-y-3 p-4 md:hidden">
+          {/* Компактная раскладка карточками (мобайл + планшет-портрет до lg): таблица
+              с min-w-[900px] на узком экране уходила бы в горизонтальный скролл. */}
+          <div className="space-y-3 p-4 lg:hidden">
             {teams.map((t) => (
               <GradeCard
                 key={t.id}
@@ -355,7 +369,7 @@ export default function Admin() {
           </>
         )}
 
-        <div className="flex items-center justify-between gap-3 border-t border-black/5 px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-black/5 px-5 py-4">
           <div className="flex items-center gap-2 text-sm">
             {saveError ? (
               <span className="font-semibold text-danger" role="alert">{saveError}</span>
@@ -369,7 +383,7 @@ export default function Admin() {
           <motion.button
             whileTap={{ scale: 0.97 }}
             onClick={saveAll}
-            disabled={loading || saving}
+            disabled={loading || saving || !dirty}
             className="btn-alfa flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-bold disabled:opacity-60"
           >
             {saving ? <Loader2 size={16} className="animate-spin" /> : saved ? <><Check size={16} /> Баллы сохранены</> : <><RefreshCw size={16} /> Сохранить и обновить рейтинг</>}
@@ -425,7 +439,7 @@ function RosterView({ team, onClose }: { team: AdminTeamRow | null; onClose: () 
       <div className="max-h-[70vh] space-y-1.5 overflow-auto p-4 pt-2">
         {error && <p className="rounded-2xl sf-1 p-4 text-center text-sm font-semibold text-danger">Не удалось загрузить состав.</p>}
         {!error && roster === null && (
-          <div className="grid h-24 place-items-center text-ink-soft"><Loader2 className="animate-spin" /></div>
+          <div className="grid h-24 place-items-center text-ink-soft" role="status" aria-live="polite"><Loader2 className="animate-spin" /><span className="sr-only">Загружаю состав…</span></div>
         )}
         {!error && roster !== null && roster.length === 0 && (
           <p className="rounded-2xl sf-1 p-4 text-center text-sm text-ink-soft">Команда ещё не добавила участников.</p>
@@ -547,7 +561,7 @@ function FeedbackPanel() {
       </div>
 
       {items === null ? (
-        <div className="grid h-32 place-items-center text-ink-soft"><Loader2 className="animate-spin" /></div>
+        <div className="grid h-32 place-items-center text-ink-soft" role="status" aria-live="polite"><Loader2 className="animate-spin" /><span className="sr-only">Загружаю отзывы…</span></div>
       ) : feedbackError ? (
         <div className="p-8 text-center text-sm font-semibold text-danger" role="alert">{feedbackError}</div>
       ) : shown.length === 0 ? (
@@ -667,6 +681,7 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
           type="number" min={0} max={3}
           value={g.cases}
           disabled={!g.submitted}
+          onFocus={(e) => e.currentTarget.select()}
           onChange={(e) => onChange({ cases: clampNum(e.target.value, 3) })}
           className="w-16 rounded-lg border border-black/10 sf-3 px-2 py-1 text-center font-bold outline-none focus:border-alfa/50 disabled:opacity-40"
         />
@@ -679,6 +694,8 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
           type="number" min={0} max={100}
           value={g.vok}
           disabled={!g.submitted}
+          title="Индекс качества обслуживания (VOC). На «Итог» напрямую не влияет — учитывается через галочку «Супер +3 VOC»."
+          onFocus={(e) => e.currentTarget.select()}
           onChange={(e) => onChange({ vok: clampNum(e.target.value, 100) })}
           className="w-16 rounded-lg border border-black/10 sf-3 px-2 py-1 text-center font-bold outline-none focus:border-alfa/50 disabled:opacity-40"
         />
@@ -780,16 +797,19 @@ const GradeCard = memo(function GradeCard({
             type="number" min={0} max={3}
             value={g.cases}
             disabled={!g.submitted}
+            onFocus={(e) => e.currentTarget.select()}
             onChange={(e) => onChange({ cases: clampNum(e.target.value, 3) })}
             className={fieldCls}
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">VOC %</span>
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">VOC %<br/><span className="normal-case font-normal text-[10px] tracking-normal">справочно, в «Итог» не идёт</span></span>
           <input
             type="number" min={0} max={100}
             value={g.vok}
             disabled={!g.submitted}
+            title="Индекс качества обслуживания (VOC). На «Итог» напрямую не влияет — учитывается через галочку «Супер +3 VOC»."
+            onFocus={(e) => e.currentTarget.select()}
             onChange={(e) => onChange({ vok: clampNum(e.target.value, 100) })}
             className={fieldCls}
           />
