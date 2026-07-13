@@ -54,6 +54,7 @@ export interface CaseItem {
   title: string
   difficulty: 'Лёгкий' | 'Средний' | 'Сложный'
   text: string
+  image?: string
 }
 
 /* ---- 7 игр сезона ---- */

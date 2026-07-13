@@ -444,7 +444,19 @@ export default function TeamCabinet() {
                       <ChevronDown size={18} className={`text-ink-soft transition-transform ${open ? 'rotate-180' : ''}`} />
                     </div>
                   </button>
-                  {open && <p className="px-4 pb-4 text-sm text-ink-soft">{c.text}</p>}
+                  {open && (
+                    <div className="px-4 pb-4">
+                      <p className="text-sm text-ink-soft">{c.text}</p>
+                      {c.image && (
+                        <img
+                          src={c.image}
+                          alt="Скриншот к кейсу"
+                          className="mt-3 w-full rounded-2xl border border-black/5 shadow-sm"
+                          loading="lazy"
+                        />
+                      )}
+                    </div>
+                  )}
                 </motion.div>
               )
             })}

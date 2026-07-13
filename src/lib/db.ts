@@ -565,13 +565,14 @@ export async function getCases(gameId: string): Promise<CaseItem[]> {
     return GAME_CASES[gameId] ?? []
   }
   const sb = requireClient()
-  const { data, error } = await sb.from('cases').select('id, title, difficulty, body').eq('game_id', gameId).order('ord')
+  const { data, error } = await sb.from('cases').select('id, title, difficulty, body, image_url').eq('game_id', gameId).order('ord')
   throwOn(error)
   return (data ?? []).map((c) => ({
     id: c.id as string,
     title: c.title as string,
     difficulty: c.difficulty as CaseItem['difficulty'],
     text: c.body as string,
+    image: (c.image_url as string | null) ?? undefined,
   }))
 }
 
