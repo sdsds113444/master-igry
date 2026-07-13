@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Play, FileDown, Upload, Send, MessageCircle, CheckCircle2, Clock,
-  UserPlus, X, MessageSquare, Loader2, Pencil, ChevronDown, Crown, ExternalLink,
+  UserPlus, X, MessageSquare, Loader2, Pencil, ChevronDown, Crown, ExternalLink, ZoomIn,
 } from 'lucide-react'
 import {
   GAME_VIDEO, GAME_FILE,
@@ -21,6 +21,7 @@ import { rankTier, rankPercent, DEADLINE, diffBadge, teamAvatar, basename } from
 import { teamTotal } from '../lib/scoring'
 import VideoModal from '../components/VideoModal'
 import MentorChatModal from '../components/MentorChatModal'
+import ImageLightbox from '../components/ImageLightbox'
 import ChatThread from '../components/ChatThread'
 import Badge from '../components/Badge'
 import ErrorCard from '../components/ErrorCard'
@@ -42,6 +43,7 @@ export default function TeamCabinet() {
   const [current, setCurrent] = useState<Game | null>(null)
   const [cases, setCases] = useState<CaseItem[]>([])
   const [openCases, setOpenCases] = useState<Set<string>>(new Set()) // раскрытые кейсы (аккордеон)
+  const [zoomImage, setZoomImage] = useState<string | null>(null) // скриншот кейса на весь экран
   const [scores, setScores] = useState<Record<string, TeamScore>>({})
 
   const [answer, setAnswer] = useState('')
@@ -357,6 +359,13 @@ export default function TeamCabinet() {
         teamName={me.name}
       />
 
+      <ImageLightbox
+        open={!!zoomImage}
+        onClose={() => setZoomImage(null)}
+        src={zoomImage ?? ''}
+        alt="Скриншот к кейсу"
+      />
+
       <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
         {/* ==== ЛЕВАЯ КОЛОНКА ==== */}
         <section className="space-y-4">
@@ -448,12 +457,19 @@ export default function TeamCabinet() {
                     <div className="px-4 pb-4">
                       <p className="text-sm text-ink-soft">{c.text}</p>
                       {c.image && (
-                        <img
-                          src={c.image}
-                          alt="Скриншот к кейсу"
-                          className="mt-3 w-full rounded-2xl border border-black/5 shadow-sm"
-                          loading="lazy"
-                        />
+                        <button
+                          type="button"
+                          onClick={() => setZoomImage(c.image!)}
+                          className="tap group relative mt-3 block w-full overflow-hidden rounded-2xl border border-black/5 shadow-sm"
+                          aria-label="Открыть скриншот на весь экран"
+                        >
+                          <img src={c.image} alt="Скриншот к кейсу" className="w-full" loading="lazy" />
+                          <span className="absolute inset-0 hidden items-center justify-center bg-black/40 transition-opacity group-hover:flex">
+                            <span className="grid h-10 w-10 place-items-center rounded-full bg-white/90 text-ink">
+                              <ZoomIn size={18} />
+                            </span>
+                          </span>
+                        </button>
                       )}
                     </div>
                   )}
