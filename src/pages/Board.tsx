@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { Trophy, Flame, Lock, Check, Play, ArrowRight, Clapperboard, Newspaper, Users } from 'lucide-react'
@@ -53,6 +53,10 @@ export default function Board() {
   const [feed, setFeed] = useState<FeedRow[] | null>(null)
   const [video, setVideo] = useState<{ title: string; src: string } | null>(null)
   const [error, setError] = useState(false)
+  // Прокрутка списка рейтинга к своей команде: контейнер списка + строка «вы».
+  const ratingListRef = useRef<HTMLDivElement>(null)
+  const myRowRef = useRef<HTMLDivElement>(null)
+  const scrolledToMe = useRef(false)
 
   useEffect(() => {
     let cancelled = false
@@ -101,6 +105,20 @@ export default function Board() {
 
   const myRating = rating?.find((r) => r.id === myTeamId)
   const myRank = myRating?.rank ?? 1
+
+  // Один раз при загрузке подматываем список рейтинга к своей строке, если она ниже
+  // видимой области — так команда сразу находит себя, а над ней видны те, кого обгонять.
+  useEffect(() => {
+    if (scrolledToMe.current || !rating || !myTeamId) return
+    const cont = ratingListRef.current
+    const row = myRowRef.current
+    if (!cont || !row) return
+    const cr = cont.getBoundingClientRect()
+    const rr = row.getBoundingClientRect()
+    const fullyVisible = rr.top >= cr.top && rr.bottom <= cr.bottom
+    if (!fullyVisible) cont.scrollTop += (rr.bottom - cr.bottom) + 12
+    scrolledToMe.current = true
+  }, [rating, myTeamId])
   const inPrizes = !!myRating && myRating.rank <= 3 // призовая тройка → залп конфетти
 
   if (error) {
@@ -467,16 +485,18 @@ export default function Board() {
                 Рейтинг появится после первой игры — сейчас у всех команд 0 очков.
               </p>
             )}
-            {rating.slice(0, 8).map((t) => (
-              <RatingRowView key={t.id} rank={t.rank} name={t.name} site={t.site} total={t.total} hue={t.hue} me={t.id === myTeamId} />
-            ))}
-
-            {myRating && myRating.rank > 8 && (
-              <>
-                <div className="my-1 text-center text-xs text-ink-soft">· · ·</div>
-                <RatingRowView rank={myRating.rank} name={myRating.name} site={myRating.site} total={myRating.total} hue={myRating.hue} me />
-              </>
-            )}
+            {/* Весь список команд, прокручиваемый. Своя строка подсвечена; при загрузке
+                доска сама подматывается к ней (useEffect выше) — не только топ-8. */}
+            <div ref={ratingListRef} className="max-h-[26rem] overflow-y-auto pr-1">
+              {rating.map((t) => (
+                <RatingRowView
+                  key={t.id}
+                  innerRef={t.id === myTeamId ? myRowRef : undefined}
+                  rank={t.rank} name={t.name} site={t.site} total={t.total} hue={t.hue}
+                  me={t.id === myTeamId}
+                />
+              ))}
+            </div>
 
             <Link
               to="/team"
@@ -504,13 +524,14 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function RatingRowView({
-  rank, name, site, total, hue, me,
-}: { rank: number; name: string; site: string; total: number; hue: number; me?: boolean }) {
+  rank, name, site, total, hue, me, innerRef,
+}: { rank: number; name: string; site: string; total: number; hue: number; me?: boolean; innerRef?: React.Ref<HTMLDivElement> }) {
   // Медаль только у команд с реальными очками: до старта у всех 0 — раздавать
   // золото/серебро за 0 баллов (по позиции в массиве) вводит в заблуждение.
   const medal = rank <= 3 && total > 0
   return (
     <div
+      ref={innerRef}
       className={`flex items-center gap-3 rounded-2xl px-3 py-2.5 ${
         me ? 'bg-alfa/10 ring-1 ring-alfa/30' : 'sf-hoversoft'
       }`}
