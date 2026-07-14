@@ -416,7 +416,7 @@ export const REACTION_EMOJIS = ['👍', '❤️', '😂', '🔥', '👏', '🎉'
 export type ReactionEmoji = (typeof REACTION_EMOJIS)[number]
 
 export interface ReactionRow { id: string; messageId: string; userId: string; emoji: string }
-type ReactionEvent = { type: 'add' | 'remove'; row: ReactionRow }
+type ReactionEvent = { type: 'add' | 'remove'; row: ReactionRow } | { type: 'sync'; rows: ReactionRow[] }
 
 /** «Это моя реакция?» — в моке нет реальной auth-сессии (getMyUid() вернул бы null),
  *  поэтому свои реакции там метятся константой MOCK_ME. */
@@ -474,8 +474,11 @@ export async function toggleReaction(
   }
 }
 
-/** Подписка на изменения реакций канала (realtime; без фоллбэк-опроса — реакции
- *  не критичны к доставке день-в-день, а мгновенный отклик даёт сам optimistic-UI). */
+/** Подписка на изменения реакций канала (realtime) с фоллбэк-опросом — как у сообщений.
+ *  На сетях, режущих wss://*.supabase.co (его, в отличие от HTTP, через Vercel не
+ *  проксировать), сокет не поднимается; тогда раз в 8с перечитываем полный снимок
+ *  реакций и отдаём событием 'sync' — иначе наблюдающий игрок не видел бы чужих
+ *  реакций до перезагрузки. Своя реакция и так мгновенна за счёт optimistic-UI. */
 export function subscribeReactions(
   teamId: string, channel: ChatChannel, onChange: (e: ReactionEvent) => void,
 ): { unsubscribe(): void } {
@@ -486,6 +489,32 @@ export function subscribeReactions(
   }
   const sb = requireClient()
   const topic = `reactions-${key}-${Math.random().toString(36).slice(2)}`
+
+  let pollTimer: number | null = null
+  let pollGen = 0
+  let pollBusy = false
+  let stopped = false
+  async function pollOnce(gen: number) {
+    if (pollBusy) return
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+    pollBusy = true
+    try {
+      const rows = await listReactions(teamId, channel)
+      if (!stopped && gen === pollGen) onChange({ type: 'sync', rows })
+    } catch { /* сеть моргнула — попробуем в следующий тик */
+    } finally { pollBusy = false }
+  }
+  function startPolling() {
+    if (stopped || pollTimer !== null) return
+    const gen = pollGen
+    void pollOnce(gen)
+    pollTimer = window.setInterval(() => { void pollOnce(gen) }, 8000)
+  }
+  function stopPolling() {
+    pollGen++
+    if (pollTimer !== null) { window.clearInterval(pollTimer); pollTimer = null }
+  }
+
   const ch = sb.channel(topic)
     .on('postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'message_reactions', filter: `team_id=eq.${teamId}` },
@@ -503,8 +532,22 @@ export function subscribeReactions(
         if (r.channel !== undefined && r.channel !== channel) return
         onChange({ type: 'remove', row: { id: r.id, messageId: r.message_id ?? '', userId: r.user_id ?? '', emoji: r.emoji ?? '' } })
       })
-    .subscribe()
-  return { unsubscribe() { sb.removeChannel(ch) } }
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        stopPolling()
+        // Catch-up снимком: реакции, вставленные в окно джойна сокета, иначе не пришли бы.
+        listReactions(teamId, channel)
+          .then((rows) => { if (!stopped) onChange({ type: 'sync', rows }) })
+          .catch(() => { /* не критично: подписка уже активна */ })
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') startPolling()
+    })
+  return {
+    unsubscribe() {
+      stopped = true
+      stopPolling()
+      sb.removeChannel(ch)
+    },
+  }
 }
 
 // =====================================================================
@@ -518,8 +561,11 @@ export function getMentorSeen(teamId: string): number {
   const raw = localStorage.getItem(MENTOR_SEEN_PREFIX + teamId)
   return raw ? new Date(raw).getTime() : 0
 }
-export function markMentorSeen(teamId: string): void {
-  localStorage.setItem(MENTOR_SEEN_PREFIX + teamId, new Date().toISOString())
+export function markMentorSeen(teamId: string, ts: number = Date.now()): void {
+  // Храним СЕРВЕРНОЕ время последнего показанного сообщения (created_at), а не Date.now()
+  // клиента: read-state сравнивается с серверными timestamp сообщений, и при сбитых часах
+  // устройства «пипочка» иначе врала бы (горела бы постоянно / пропускала уведомление).
+  localStorage.setItem(MENTOR_SEEN_PREFIX + teamId, new Date(ts).toISOString())
 }
 
 /** Для тренера (админка): по каждой команде — время последнего сообщения ОТ КОМАНДЫ

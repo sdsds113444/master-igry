@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Play, FileDown, Upload, Send, MessageCircle, CheckCircle2, Clock,
@@ -56,6 +56,8 @@ export default function TeamCabinet() {
   const [roster, setRoster] = useState<RosterMember[]>([])
   const [newPlayer, setNewPlayer] = useState('')
   const [rosterError, setRosterError] = useState('')
+  // id игры, чьи кейсы/ответ сейчас загружены — чтобы фоновый refresh заметил смену недели.
+  const loadedGameId = useRef<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -88,6 +90,7 @@ export default function TeamCabinet() {
         setTeamsCount(rating.length || 30)
         setGames(gs)
         setCurrent(cur)
+        loadedGameId.current = cur?.id ?? null
         setRoster(r)
         setScores(s)
         setCases(c)
@@ -133,12 +136,30 @@ export default function TeamCabinet() {
       if (document.visibilityState !== 'visible' || refreshing) return
       refreshing = true
       try {
-        const [rating, s] = await Promise.all([listTeamsRating(), getScores(me!.id)])
+        const [rating, s, gs] = await Promise.all([listTeamsRating(), getScores(me!.id), getGames()])
         const mine = rating.find((x) => x.id === me!.id)
         setRank(mine?.rank ?? 1)
         setTotal(mine?.total ?? 0)
         setTeamsCount(rating.length || 30)
         setScores(s)
+        setGames(gs)
+        const cur = pickCurrentGame(gs)
+        setCurrent(cur)
+        // Сменилась активная игра (опубликовали следующую неделю) — подтягиваем её кейсы и
+        // ранее сданный ответ. Иначе кабинет висел бы со старым заданием, а повторная сдача
+        // падала бы с ложной «ошибкой сети» (RLS не пускает ответ в уже закрытую игру).
+        if ((cur?.id ?? null) !== loadedGameId.current) {
+          loadedGameId.current = cur?.id ?? null
+          const [c, sub] = await Promise.all([
+            cur ? getCases(cur.id) : Promise.resolve([]),
+            cur ? getSubmission(me!.id, cur.id) : Promise.resolve(null),
+          ])
+          setCases(c)
+          setOpenCases(new Set())
+          if (sub) { setAnswer(sub.answer); setFileAttached(sub.fileName); setSent(true) }
+          else { setAnswer(''); setFileAttached(null); setSent(false) }
+          setFile(null)
+        }
       } catch { /* фоновое обновление — тихо */ } finally { refreshing = false }
     }
     window.addEventListener('focus', refresh)
@@ -151,15 +172,25 @@ export default function TeamCabinet() {
     }
   }, [me])
 
-  // Открыть чат с тренером: помечаем прочитанным и гасим точку.
+  // Пометить чат с тренером прочитанным СЕРВЕРНЫМ временем последнего его сообщения
+  // (а не Date.now() клиента) — иначе «пипочка» врёт при сбитых часах устройства.
+  async function markMentorRead() {
+    if (!me) return
+    let ts = Date.now()
+    try { ts = await getMentorLatestFromTrainer(me.id) } catch { /* оставляем Date.now() */ }
+    markMentorSeen(me.id, ts)
+  }
+
+  // Открыть чат с тренером: сразу гасим точку, прочитанное фиксируем серверным временем.
   function openMentorChat() {
-    if (me) markMentorSeen(me.id)
     setMentorUnread(false)
     setMentorChatOpen(true)
+    void markMentorRead()
   }
 
   const tier = rankTier(rank, teamsCount)
   const rankProgress = rankPercent(rank, teamsCount)
+  const seasonStarted = games.some((g) => g.status === 'current' || g.status === 'done')
 
   async function addPlayer(e: React.FormEvent) {
     e.preventDefault()
@@ -354,7 +385,7 @@ export default function TeamCabinet() {
 
       <MentorChatModal
         open={mentorChatOpen}
-        onClose={() => { markMentorSeen(me.id); setMentorUnread(false); setMentorChatOpen(false) }}
+        onClose={() => { setMentorUnread(false); setMentorChatOpen(false); void markMentorRead() }}
         teamId={me.id}
         teamName={me.name}
       />
@@ -593,18 +624,28 @@ export default function TeamCabinet() {
                 <div className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
                   Место в сезоне
                 </div>
-                <div className="font-display text-3xl font-extrabold leading-none">
-                  #{rank}
-                </div>
-                <div className="mt-1.5 flex items-center gap-1.5 text-sm font-bold" style={{ color: tier.textColor }}>
-                  <Icon3D name={EMOJI_ICON_3D[tier.emoji]} fallback={tier.emoji} className="h-5 w-5 object-contain drop-shadow-sm" /> {tier.label}
-                </div>
-                <div className="mt-2 h-2 w-full max-w-[140px] overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
-                  <div className="h-full rounded-full transition-[width]" style={{ width: `${rankProgress}%`, background: tier.color }} />
-                </div>
-                <div className="mt-1 text-xs font-semibold text-ink-soft">
-                  из {teamsCount} команд
-                </div>
+                {seasonStarted ? (
+                  <>
+                    <div className="font-display text-3xl font-extrabold leading-none">
+                      #{rank}
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-1.5 text-sm font-bold" style={{ color: tier.textColor }}>
+                      <Icon3D name={EMOJI_ICON_3D[tier.emoji]} fallback={tier.emoji} className="h-5 w-5 object-contain drop-shadow-sm" /> {tier.label}
+                    </div>
+                    <div className="mt-2 h-2 w-full max-w-[140px] overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
+                      <div className="h-full rounded-full transition-[width]" style={{ width: `${rankProgress}%`, background: tier.color }} />
+                    </div>
+                    <div className="mt-1 text-xs font-semibold text-ink-soft">
+                      из {teamsCount} команд
+                    </div>
+                  </>
+                ) : (
+                  // До старта у всех 0 очков, ранг (алфавитный) ничего не значит — не показываем
+                  // «#1 · Топ-3 · 100%», это вводило бы команду в заблуждение.
+                  <div className="mt-1.5 max-w-[150px] text-sm font-semibold text-ink-soft">
+                    Появится после первой игры
+                  </div>
+                )}
               </div>
             </div>
           </div>

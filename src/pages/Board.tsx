@@ -119,7 +119,10 @@ export default function Board() {
     if (!fullyVisible) cont.scrollTop += (rr.bottom - cr.bottom) + 12
     scrolledToMe.current = true
   }, [rating, myTeamId])
-  const inPrizes = !!myRating && myRating.rank <= 3 // призовая тройка → залп конфетти
+  // Залп конфетти — только реальной призовой тройке с НЕнулевыми очками. До старта у всех
+  // 0 очков, а ранги 1-3 достаются алфавитно-первым командам — без total>0 они бы получали
+  // фейерверк «за первое место» ещё до единой сыгранной игры.
+  const inPrizes = !!myRating && myRating.total > 0 && myRating.rank <= 3
 
   if (error) {
     return <ErrorCard title="Не удалось загрузить доску" />
@@ -191,8 +194,8 @@ export default function Board() {
             </h1>
             <p className="mt-2 max-w-md text-sm text-ink-soft">
               {activeGame
-                ? <>Здесь выходят мультики КОЯ, прилетают задания недели и обновляется рейтинг всех 30 команд. Сейчас идёт игра «{activeGame.title}».</>
-                : <>Здесь будут выходить мультики КОЯ, прилетать задания недели и обновляться рейтинг всех 30 команд. Начните со вступительного мультика — он объясняет правила. Игры сезона откроются на старте.</>}
+                ? <>Здесь выходят мультики КОЯ, прилетают задания недели и обновляется рейтинг всех {rating.length} команд. Сейчас идёт игра «{activeGame.title}».</>
+                : <>Здесь будут выходить мультики КОЯ, прилетать задания недели и обновляться рейтинг всех {rating.length} команд. Начните со вступительного мультика — он объясняет правила. Игры сезона откроются на старте.</>}
             </p>
 
             {/* Прогресс сезона — показываем, только когда сезон уже идёт */}
@@ -303,31 +306,41 @@ export default function Board() {
           >
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Место в сезоне</div>
-              <div className="mt-0.5 flex items-baseline gap-1.5">
-                <span className="font-display text-3xl font-extrabold leading-none">#<CountUp value={myRank} /></span>
-                <span className="text-sm font-bold text-ink-soft">из {rating.length}</span>
-              </div>
+              {seasonStarted ? (
+                <div className="mt-0.5 flex items-baseline gap-1.5">
+                  <span className="font-display text-3xl font-extrabold leading-none">#<CountUp value={myRank} /></span>
+                  <span className="text-sm font-bold text-ink-soft">из {rating.length}</span>
+                </div>
+              ) : (
+                <div className="mt-0.5 text-sm font-bold text-ink-soft">Появится после первой игры</div>
+              )}
             </div>
-            <div className="hidden h-10 w-px bg-black/10 dark:bg-white/15 sm:block" />
-            <div className="flex items-center gap-2 text-sm font-bold" style={{ color: tier.textColor }}>
-              <Icon3D name={EMOJI_ICON_3D[tier.emoji]} fallback={tier.emoji} className="h-7 w-7 object-contain drop-shadow-sm" />
-              {tier.label}
-            </div>
-            <div className="w-40">
-              <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-ink-soft">
-                <span>Путь к вершине</span>
-                <span>{percent}%</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ background: tier.color }}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${percent}%` }}
-                  transition={{ delay: 0.5, duration: 0.8 }}
-                />
-              </div>
-            </div>
+            {/* Тир и «путь к вершине» — только когда сезон стартовал: до старта у всех 0 очков,
+                и ранг (алфавитный) не значит ничего, поэтому «Топ-3 · 100%» вводил бы в заблуждение. */}
+            {seasonStarted && (
+              <>
+                <div className="hidden h-10 w-px bg-black/10 dark:bg-white/15 sm:block" />
+                <div className="flex items-center gap-2 text-sm font-bold" style={{ color: tier.textColor }}>
+                  <Icon3D name={EMOJI_ICON_3D[tier.emoji]} fallback={tier.emoji} className="h-7 w-7 object-contain drop-shadow-sm" />
+                  {tier.label}
+                </div>
+                <div className="w-40">
+                  <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-ink-soft">
+                    <span>Путь к вершине</span>
+                    <span>{percent}%</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
+                    <motion.div
+                      className="h-full rounded-full"
+                      style={{ background: tier.color }}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${percent}%` }}
+                      transition={{ delay: 0.5, duration: 0.8 }}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </motion.section>
         )
       })()}

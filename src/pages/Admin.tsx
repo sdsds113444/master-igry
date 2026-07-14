@@ -62,6 +62,9 @@ export default function Admin() {
 
   const [teams, setTeams] = useState<AdminTeamRow[]>([])
   const [grades, setGrades] = useState<Record<string, Grade>>({})
+  // id команд с несохранёнными правками именно этой сессии — сохраняем ТОЛЬКО их,
+  // чтобы не перезаписывать чужие оценки устаревшим снимком (общая админ-учётка).
+  const [dirtyTeams, setDirtyTeams] = useState<Set<string>>(new Set())
   const [chatTeam, setChatTeam] = useState<AdminTeamRow | null>(null)
   // Ответы команд по выбранной игре (текст + путь к файлу) — источник «сдал/не сдал» и просмотра.
   const [answers, setAnswers] = useState<Record<string, { answer: string; filePath: string | null }>>({})
@@ -120,6 +123,7 @@ export default function Admin() {
         setPublished(false)
         setSaved(false)
         setDirty(false)
+        setDirtyTeams(new Set())
       } catch {
         if (!cancelled) setLoadError(true)
       } finally {
@@ -165,10 +169,12 @@ export default function Admin() {
 
   // Открыть чат с командой: помечаем прочитанным, гасим точку.
   const openTeamChat = useCallback((t: AdminTeamRow) => {
-    markMentorSeen(t.id)
+    // Помечаем прочитанным серверным временем последнего сообщения команды (а не Date.now()):
+    // read-state сравнивается с server created_at, клиентские часы могут врать.
+    markMentorSeen(t.id, mentorLatest[t.id] ?? Date.now())
     setSeenTick((n) => n + 1)
     setChatTeam(t)
-  }, [])
+  }, [mentorLatest])
 
   const submittedCount = Object.values(grades).filter((g) => g.submitted).length
   const isPublished = games.find((g) => g.id === gameId)?.status === 'current'
@@ -178,6 +184,7 @@ export default function Admin() {
   // на каждый ввод символа — перерисовывается только та команда, чей grade изменился.
   const upd = useCallback((id: string, patch: Partial<Grade>) => {
     setGrades((g) => ({ ...g, [id]: { ...g[id], ...patch } }))
+    setDirtyTeams((s) => { const n = new Set(s); n.add(id); return n }) // помечаем команду изменённой
     setSaved(false)
     setDirty(true)
   }, [])
@@ -204,14 +211,18 @@ export default function Admin() {
     setSaving(true)
     setSaveError('')
     try {
-      // Один пакетный upsert вместо 30 отдельных запросов. Маппинг «строка оценивания →
-      // очки» вынесен в scoreWrite (scoring.ts) и покрыт тестами: «не сдала» обнуляет
-      // всю строку (в т.ч. vok/feedback), «сдала» переводит галочки в веса.
-      await gradeMany(
-        teams.map((t) => ({ teamId: t.id, gameId, ...scoreWrite(grades[t.id]) })),
-      )
+      // КРИТИЧНО: пишем ТОЛЬКО реально изменённые в этой сессии команды, а не весь батч по
+      // всем командам. Раньше saveAll слепо апсертил строки ВСЕХ команд из локального
+      // снимка → при общей админ-учётке второй тренер затирал баллы первого нулями из
+      // своего устаревшего снимка (тихий lost-update). Маппинг «строка оценивания → очки»
+      // вынесен в scoreWrite (scoring.ts) и покрыт тестами.
+      const changed = teams.filter((t) => dirtyTeams.has(t.id))
+      if (changed.length > 0) {
+        await gradeMany(changed.map((t) => ({ teamId: t.id, gameId, ...scoreWrite(grades[t.id]) })))
+      }
       setSaved(true)
       setDirty(false)
+      setDirtyTeams(new Set())
     } catch {
       setSaveError('Не удалось сохранить баллы. Проверьте соединение и попробуйте ещё раз.')
     } finally {
