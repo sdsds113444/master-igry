@@ -8,25 +8,7 @@ import {
   getRoster, listFeedback, setFeedbackStatus, type AdminTeamRow, type FeedbackRow, type RosterMember,
 } from '../lib/db'
 
-/** Короткий «пинг» через WebAudio (без ассета) — сигнал тренеру о новом сообщении.
- *  Не критичен: браузер может блокировать звук до первого клика — глотаем ошибку. */
-function playPing() {
-  try {
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-    if (!Ctx) return
-    const ctx = new Ctx()
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.connect(gain); gain.connect(ctx.destination)
-    osc.frequency.value = 880
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.01)
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35)
-    osc.start()
-    osc.stop(ctx.currentTime + 0.36)
-    osc.onended = () => ctx.close()
-  } catch { /* звук не критичен */ }
-}
+import { playPing } from '../lib/ping'
 import MentorChatModal from '../components/MentorChatModal'
 import Dialog from '../components/Dialog'
 import ErrorCard from '../components/ErrorCard'
@@ -73,7 +55,11 @@ export default function Admin() {
   // «Пипочка»: по каждой команде — время последнего сообщения от неё в чате с тренером.
   const [mentorLatest, setMentorLatest] = useState<Record<string, number>>({})
   const [seenTick, setSeenTick] = useState(0) // форс-пересчёт непрочитанного после «прочитано»
-  const prevUnreadCount = useRef<number | null>(null)
+  // Снимок «время последнего сообщения по каждой команде» с прошлой проверки — источник
+  // звука: пингуем на КАЖДОЕ новое сообщение, а не на прирост числа команд с непрочитанным
+  // (иначе второе сообщение той же команды звучало бы тишиной).
+  const prevMentorLatest = useRef<Record<string, number> | null>(null)
+  const openChatTeamId = useRef<string | null>(null) // чей чат открыт — по нему не пингуем
 
   // Список игр (+ игра по умолчанию) и список команд грузим ОДИН раз: команды от
   // выбранной игры не зависят, ни к чему перезапрашивать их при каждом переключении.
@@ -141,14 +127,22 @@ export default function Admin() {
   useEffect(() => {
     let stopped = false
     async function check() {
-      if (document.visibilityState !== 'visible') return
+      // Гейта по visibilityState здесь НЕТ намеренно: смысл звукового уведомления —
+      // сработать, когда тренер смотрит в другое окно. Раньше опрос в фоновой вкладке не
+      // шёл вообще, и звук раздавался только когда тренер сам возвращался на вкладку.
       try {
         const latest = await listMentorLatestFromTeams()
         if (stopped) return
         setMentorLatest(latest)
-        const count = Object.keys(latest).filter((tid) => latest[tid] > getMentorSeen(tid)).length
-        if (prevUnreadCount.current !== null && count > prevUnreadCount.current) playPing()
-        prevUnreadCount.current = count
+        const prev = prevMentorLatest.current
+        if (prev !== null) {
+          const hasNew = Object.keys(latest).some((tid) =>
+            latest[tid] > (prev[tid] ?? 0)          // пришло после прошлой проверки
+            && latest[tid] > getMentorSeen(tid)      // и это непрочитанное
+            && tid !== openChatTeamId.current)       // и не тот чат, что открыт прямо сейчас
+          if (hasNew) playPing()
+        }
+        prevMentorLatest.current = latest
       } catch { /* тихо: фоновый опрос */ }
     }
     check()
@@ -173,6 +167,7 @@ export default function Admin() {
     // read-state сравнивается с server created_at, клиентские часы могут врать.
     markMentorSeen(t.id, mentorLatest[t.id] ?? Date.now())
     setSeenTick((n) => n + 1)
+    openChatTeamId.current = t.id
     setChatTeam(t)
   }, [mentorLatest])
 
@@ -404,7 +399,11 @@ export default function Admin() {
 
       <MentorChatModal
         open={!!chatTeam}
-        onClose={() => { if (chatTeam) { markMentorSeen(chatTeam.id); setSeenTick((n) => n + 1) } setChatTeam(null) }}
+        onClose={() => {
+          if (chatTeam) { markMentorSeen(chatTeam.id, mentorLatest[chatTeam.id] ?? Date.now()); setSeenTick((n) => n + 1) }
+          openChatTeamId.current = null
+          setChatTeam(null)
+        }}
         teamId={chatTeam?.id ?? ''}
         teamName={chatTeam?.name ?? ''}
         asAdmin

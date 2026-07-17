@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import Login from './pages/Login'
 import Loader from './components/Loader'
 import { getSession, reconcileSession } from './lib/db'
+import { initPing } from './lib/ping'
 
 // Тяжёлые страницы грузятся по требованию — не тянем их в стартовый бандл.
 const Board = lazy(() => import('./pages/Board'))
@@ -22,6 +23,10 @@ function RequireAdmin({ children }: { children: ReactElement }) {
 
 export default function App() {
   const navigate = useNavigate()
+
+  // Разблокировка звука уведомлений на первом жесте пользователя (правило браузера:
+  // без взаимодействия со страницей звук не играет).
+  useEffect(() => { initPing() }, [])
 
   // Если анонимная auth-сессия истекла/пропала, а локальная «висит» — разлогиниваем,
   // чтобы не застрять залогиненным с пустыми данными (RLS вернёт пусто).

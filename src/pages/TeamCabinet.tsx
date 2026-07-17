@@ -19,6 +19,7 @@ import {
 const ROSTER_LIMIT = 10
 import { rankTier, rankPercent, DEADLINE, diffBadge, teamAvatar, basename } from '../lib/ui'
 import { teamTotal } from '../lib/scoring'
+import { playPing } from '../lib/ping'
 import VideoModal from '../components/VideoModal'
 import MentorChatModal from '../components/MentorChatModal'
 import ImageLightbox from '../components/ImageLightbox'
@@ -58,6 +59,10 @@ export default function TeamCabinet() {
   const [rosterError, setRosterError] = useState('')
   // id игры, чьи кейсы/ответ сейчас загружены — чтобы фоновый refresh заметил смену недели.
   const loadedGameId = useRef<string | null>(null)
+  // Время последнего ответа тренера с прошлой проверки — источник звука о новом ответе.
+  const prevMentorLatest = useRef<number | null>(null)
+  // Открыт ли чат с тренером прямо сейчас (ref, а не state: читается из фонового опроса).
+  const mentorChatOpenRef = useRef(false)
 
   useEffect(() => {
     let cancelled = false
@@ -115,10 +120,19 @@ export default function TeamCabinet() {
     if (!me) return
     let stopped = false
     async function check() {
-      if (document.visibilityState !== 'visible') return
+      // Гейта по visibilityState здесь НЕТ намеренно: смысл звука — сработать, когда
+      // команда смотрит в другое окно (иначе уведомление приходило бы ровно тогда,
+      // когда на него и так смотрят).
       try {
         const latest = await getMentorLatestFromTrainer(me!.id)
-        if (!stopped) setMentorUnread(latest > getMentorSeen(me!.id))
+        if (stopped) return
+        const unread = latest > getMentorSeen(me!.id)
+        setMentorUnread(unread)
+        // Звук — только на НОВЫЙ ответ тренера и только если чат закрыт: если он открыт,
+        // сообщение и так видно вживую (и ChatThread пингует сам).
+        if (prevMentorLatest.current !== null && latest > prevMentorLatest.current
+            && unread && !mentorChatOpenRef.current) playPing()
+        prevMentorLatest.current = latest
       } catch { /* тихо: фоновая проверка */ }
     }
     check()
@@ -184,6 +198,7 @@ export default function TeamCabinet() {
   // Открыть чат с тренером: сразу гасим точку, прочитанное фиксируем серверным временем.
   function openMentorChat() {
     setMentorUnread(false)
+    mentorChatOpenRef.current = true
     setMentorChatOpen(true)
     void markMentorRead()
   }
@@ -385,7 +400,12 @@ export default function TeamCabinet() {
 
       <MentorChatModal
         open={mentorChatOpen}
-        onClose={() => { setMentorUnread(false); setMentorChatOpen(false); void markMentorRead() }}
+        onClose={() => {
+          setMentorUnread(false)
+          mentorChatOpenRef.current = false
+          setMentorChatOpen(false)
+          void markMentorRead()
+        }}
         teamId={me.id}
         teamName={me.name}
       />
