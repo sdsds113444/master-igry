@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Play, FileDown, Upload, Send, MessageCircle, CheckCircle2, Clock,
-  UserPlus, X, MessageSquare, Loader2, Pencil, ChevronDown, Crown, ExternalLink, ZoomIn,
+  UserPlus, X, MessageSquare, Loader2, Pencil, ChevronDown, Crown, ExternalLink, ZoomIn, Check,
 } from 'lucide-react'
 import {
   GAME_VIDEO, GAME_FILE,
@@ -10,6 +10,7 @@ import {
 } from '../data/mock'
 import {
   getMyTeam, listTeamsRating, getRoster, addPlayer as dbAddPlayer, removePlayer as dbRemovePlayer,
+  renamePlayer as dbRenamePlayer,
   getCases, getScores, getSubmission, submitAnswer, getGames, pickCurrentGame,
   getMentorLatestFromTrainer, getMentorSeen, markMentorSeen, setCaptain as dbSetCaptain,
   type TeamInfo, type RosterMember,
@@ -57,6 +58,8 @@ export default function TeamCabinet() {
   const [roster, setRoster] = useState<RosterMember[]>([])
   const [newPlayer, setNewPlayer] = useState('')
   const [rosterError, setRosterError] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null) // чьё ФИО правим прямо сейчас
+  const [editName, setEditName] = useState('')
   // id игры, чьи кейсы/ответ сейчас загружены — чтобы фоновый refresh заметил смену недели.
   const loadedGameId = useRef<string | null>(null)
   // Время последнего ответа тренера с прошлой проверки — источник звука о новом ответе.
@@ -248,6 +251,40 @@ export default function TeamCabinet() {
     } catch {
       setRoster(prev) // откат: возвращаем игрока в список
       setRosterError('Не удалось убрать игрока — попробуйте ещё раз.')
+    }
+  }
+
+  function startEdit(member: RosterMember) {
+    setRosterError('')
+    setEditingId(member.id)
+    setEditName(member.name)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditName('')
+  }
+
+  /** Сохранить исправленное ФИО. Правки по id строки — тёзки не путаются. */
+  async function saveEdit(member: RosterMember) {
+    if (!me) return
+    const name = editName.trim()
+    if (!name) { setRosterError('Имя не может быть пустым.'); return }
+    if (name === member.name) { cancelEdit(); return } // ничего не поменяли — молча закрываем
+    // Та же проверка на дубли, что и при добавлении, но себя в расчёт не берём.
+    if (roster.some((p) => p.id !== member.id && p.name.trim().toLowerCase() === name.toLowerCase())) {
+      setRosterError('Игрок с таким именем уже в составе.')
+      return
+    }
+    const prev = roster
+    setRosterError('')
+    setRoster((r) => r.map((p) => (p.id === member.id ? { ...p, name } : p)))
+    cancelEdit()
+    try {
+      await dbRenamePlayer(me.id, member.id, name)
+    } catch {
+      setRoster(prev) // откат: возвращаем прежнее имя
+      setRosterError('Не удалось изменить имя — попробуйте ещё раз.')
     }
   }
 
@@ -682,29 +719,74 @@ export default function TeamCabinet() {
               {roster.map((p) => (
                 <li key={p.id} className="group flex items-center gap-2.5 rounded-xl px-2 py-1 sf-hoversoft">
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full sf-2 text-xs font-bold">{p.name.slice(0, 1)}</span>
-                  <span className="flex-1 text-sm font-semibold">{p.name}</span>
-                  {p.isCaptain ? (
-                    <span className="grid h-9 w-9 place-items-center" title="Капитан">
-                      <Icon3D name="crown" className="h-7 w-7 object-contain drop-shadow-sm" />
-                    </span>
-                  ) : (
+                  {editingId === p.id ? (
+                    // Режим правки ФИО: Enter — сохранить, Esc — отменить.
                     <>
+                      <input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); void saveEdit(p) }
+                          if (e.key === 'Escape') { e.preventDefault(); cancelEdit() }
+                        }}
+                        autoFocus
+                        aria-label={`Фамилия и имя игрока ${p.name}`}
+                        className="field min-w-0 flex-1 px-2.5 py-1.5 text-sm outline-none"
+                      />
                       <button
-                        onClick={() => makeCaptain(p)}
-                        aria-label={`Сделать капитаном ${p.name}`}
-                        title="Сделать капитаном"
-                        className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa focus-visible:bg-alfa/10 focus-visible:text-alfa"
+                        onClick={() => void saveEdit(p)}
+                        aria-label="Сохранить имя"
+                        title="Сохранить"
+                        className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-success transition-colors hover:bg-success/10 focus-visible:bg-success/10"
                       >
-                        <Crown size={16} />
+                        <Check size={16} />
                       </button>
                       <button
-                        onClick={() => removePlayer(p)}
-                        aria-label={`Убрать игрока ${p.name}`}
-                        title="Убрать игрока"
+                        onClick={cancelEdit}
+                        aria-label="Отменить"
+                        title="Отменить"
                         className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa focus-visible:bg-alfa/10 focus-visible:text-alfa"
                       >
                         <X size={16} />
                       </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex-1 text-sm font-semibold">{p.name}</span>
+                      {/* Карандаш есть и у капитана: опечатка в ФИО возможна у любого,
+                          а удалять и заводить человека заново — потерять флаг капитана. */}
+                      <button
+                        onClick={() => startEdit(p)}
+                        aria-label={`Изменить имя ${p.name}`}
+                        title="Изменить имя"
+                        className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa focus-visible:bg-alfa/10 focus-visible:text-alfa"
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      {p.isCaptain ? (
+                        <span className="grid h-9 w-9 place-items-center" title="Капитан">
+                          <Icon3D name="crown" className="h-7 w-7 object-contain drop-shadow-sm" />
+                        </span>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => makeCaptain(p)}
+                            aria-label={`Сделать капитаном ${p.name}`}
+                            title="Сделать капитаном"
+                            className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa focus-visible:bg-alfa/10 focus-visible:text-alfa"
+                          >
+                            <Crown size={16} />
+                          </button>
+                          <button
+                            onClick={() => removePlayer(p)}
+                            aria-label={`Убрать игрока ${p.name}`}
+                            title="Убрать игрока"
+                            className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa focus-visible:bg-alfa/10 focus-visible:text-alfa"
+                          >
+                            <X size={16} />
+                          </button>
+                        </>
+                      )}
                     </>
                   )}
                 </li>

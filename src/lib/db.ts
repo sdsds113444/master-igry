@@ -248,6 +248,22 @@ export async function addPlayer(teamId: string, name: string): Promise<RosterMem
   return { id: data!.id as string, name: data!.full_name as string, isCaptain: !!data!.is_captain }
 }
 
+/** Переименовать игрока ПО id строки состава. ФИО вносят руками, опечатки неизбежны —
+ *  без этого команде пришлось бы удалять человека и заводить заново (а вместе с ним
+ *  слетал бы и флаг капитана). Лимит состава тут ни при чём: триггер roster_limit
+ *  висит только на INSERT, UPDATE его не задевает. */
+export async function renamePlayer(teamId: string, rosterId: string, name: string): Promise<void> {
+  const n = name.trim()
+  if (!n) throw new Error('empty_name')
+  if (!isSupabaseConfigured) {
+    mockRoster[teamId] = (mockRoster[teamId] ?? []).map((p) => (p.id === rosterId ? { ...p, name: n } : p))
+    return
+  }
+  const { error } = await requireClient().from('roster')
+    .update({ full_name: n }).eq('team_id', teamId).eq('id', rosterId)
+  throwOn(error)
+}
+
 /** Удалить игрока ПО id строки состава (не по имени — иначе стёрлись бы все тёзки). */
 export async function removePlayer(teamId: string, rosterId: string): Promise<void> {
   if (!isSupabaseConfigured) {
