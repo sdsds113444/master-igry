@@ -29,6 +29,13 @@ import Badge from '../components/Badge'
 import ErrorCard from '../components/ErrorCard'
 import Icon3D, { EMOJI_ICON_3D, GAME_ICON_3D } from '../components/Icon3D'
 
+/** Есть ли в тексте хоть одна буква или цифра. Одни знаки препинания/пробелы (например
+ *  случайная запятая на мобильной клавиатуре) ответом НЕ считаются — иначе такой «ответ»
+ *  проходил как сдача и показывал тренеру мусорную «точку». */
+function hasMeaningfulText(s: string): boolean {
+  return /[\p{L}\p{N}]/u.test(s)
+}
+
 export default function TeamCabinet() {
   const [me, setMe] = useState<TeamInfo | null>(null)
   const [loading, setLoading] = useState(true)
@@ -301,9 +308,10 @@ export default function TeamCabinet() {
     }
   }
 
-  // Есть что сдавать: непустой текст, новый файл или ранее прикреплённый файл.
-  // Иначе пустой upsert создал бы строку в answers, и админка сочла бы её «сдано».
-  const canSubmit = !!answer.trim() || !!file || !!fileAttached
+  // Есть что сдавать: ОСМЫСЛЕННЫЙ текст (буква/цифра, а не одни знаки препинания),
+  // новый файл или ранее прикреплённый файл. Иначе случайная запятая проходила как
+  // «сдача» и создавала мусорную строку в answers, а админка считала её «сдано».
+  const canSubmit = hasMeaningfulText(answer) || !!file || !!fileAttached
 
   async function sendAnswer() {
     if (!me || !current || sending || !canSubmit) return // guard от двойной/пустой отправки
@@ -570,6 +578,12 @@ export default function TeamCabinet() {
           <div className="glass-strong rounded-glass p-5">
             <h3 className="font-display text-lg font-bold">Ответ команды</h3>
             <p className="text-sm text-ink-soft">Обсудите в чате и оформите общий ответ. Отправляет капитан.</p>
+            {!sent && (
+              <p className="mt-2 rounded-xl bg-alfa/5 px-3 py-2 text-xs text-ink-soft">
+                Не удаётся прикрепить файл (запрет вашей организации)? Впишите ответ прямо в поле —
+                текстом это тоже засчитывается.
+              </p>
+            )}
             {sent ? (
               <>
                 <div
