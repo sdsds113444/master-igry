@@ -622,12 +622,6 @@ export default function TeamCabinet() {
           <div className="glass-strong rounded-glass p-5">
             <h3 className="font-display text-lg font-bold">Ответ команды</h3>
             <p className="text-sm text-ink-soft">Обсудите в чате и оформите общий ответ. Отправляет капитан.</p>
-            {!sent && (
-              <div className="mt-2 rounded-xl bg-alfa/5 px-3 py-2 text-xs text-ink-soft">
-                <p><b>Проще всего — впишите ответ текстом</b> прямо в поле: это работает с любого устройства, в том числе с рабочего компьютера, и всегда засчитывается.</p>
-                <p className="mt-1">Файл на рабочем ПК часто блокирует политика банка. Нужен именно файл — прикрепляйте <b>с личного телефона и за один раз</b>: приложили → сразу «Отправить», не перезагружая страницу.</p>
-              </div>
-            )}
             {sent ? (
               <>
                 <div
