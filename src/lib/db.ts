@@ -220,6 +220,43 @@ export async function getMyTeam(): Promise<TeamInfo | null> {
   return (data as TeamInfo) ?? null
 }
 
+/** Итог загрузки кабинета команды (см. resolveMyTeam). */
+export type MyTeamResult =
+  | { status: 'admin' }              // вошли администратором — своего кабинета команды нет
+  | { status: 'ok'; team: TeamInfo } // команда найдена (возможно, после перепривязки)
+  | { status: 'broken' }             // игрок, но команду подтвердить не удалось → войти заново
+
+/** Команда текущего игрока с самолечением рассинхрона анонимной сессии.
+ *
+ *  Кабинет виден, только пока анонимный uid браузера привязан к команде в team_sessions
+ *  (RLS: teams.id = current_team_id()). Банковский контур рвёт обновление анонимного
+ *  токена и чистит хранилище, uid перестаёт совпадать с командой → getMyTeam вернёт
+ *  null, хотя код введён верный и команда на месте. Раньше это показывало ЛОЖНОЕ
+ *  «вы администратор».
+ *
+ *  Логика: если локально мы игрок с сохранённым кодом, но команда не отдалась —
+ *  ОДИН раз повторяем redeem по этому коду (перепривязывает текущий uid к команде) и
+ *  подтверждаем повторным чтением.
+ *
+ *  ВАЖНО про ошибки (инвариант, ради которого тут нет catch): сетевые сбои — и первого
+ *  getMyTeam, и signInByCode, и подтверждающего getMyTeam — НЕ глушим, они летят наверх
+ *  (Promise в load() → setLoadError → «не удалось загрузить», retry). Иначе моргание
+ *  сети СРАЗУ ПОСЛЕ успешной перепривязки превратилось бы в ложный 'broken' и разлогинило
+ *  бы только что починенную рабочую сессию. 'broken' — это ТОЛЬКО однозначное «команду не
+ *  подтвердить»: signInByCode вернул null (код больше не действует — команда снята) или
+ *  повторный getMyTeam снова отдал null (перепривязка не помогла). */
+export async function resolveMyTeam(): Promise<MyTeamResult> {
+  const ses = getSession()
+  if (ses?.role === 'admin') return { status: 'admin' }
+
+  let team = await getMyTeam()
+  if (!team && ses?.role === 'player' && ses.code) {
+    const relinked = await signInByCode(ses.code)
+    if (relinked) team = await getMyTeam()
+  }
+  return team ? { status: 'ok', team } : { status: 'broken' }
+}
+
 export async function getRoster(teamId: string): Promise<RosterMember[]> {
   if (!isSupabaseConfigured) {
     return mockRoster[teamId] ?? (mockRoster[teamId] = seedRoster())

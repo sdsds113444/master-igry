@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   Play, FileDown, Upload, Send, MessageCircle, CheckCircle2, Clock,
@@ -9,7 +10,7 @@ import {
   type TeamScore, type CaseItem, type Game,
 } from '../data/mock'
 import {
-  getMyTeam, listTeamsRating, getRoster, addPlayer as dbAddPlayer, removePlayer as dbRemovePlayer,
+  resolveMyTeam, signOut, listTeamsRating, getRoster, addPlayer as dbAddPlayer, removePlayer as dbRemovePlayer,
   renamePlayer as dbRenamePlayer,
   getCases, getScores, getSubmission, submitAnswer, getGames, pickCurrentGame,
   getMentorLatestFromTrainer, getMentorSeen, markMentorSeen, setCaptain as dbSetCaptain,
@@ -37,9 +38,14 @@ function hasMeaningfulText(s: string): boolean {
 }
 
 export default function TeamCabinet() {
+  const navigate = useNavigate()
   const [me, setMe] = useState<TeamInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
+  // Игрок вошёл, но команду не удалось подтвердить даже после перепривязки по коду
+  // (рассинхрон анонимной сессии — банковский контур). Честно уводим на вход, а не
+  // показываем ложное «вы администратор».
+  const [sessionBroken, setSessionBroken] = useState(false)
   const [rank, setRank] = useState(1)
   const [total, setTotal] = useState(0)
   const [teamsCount, setTeamsCount] = useState(30) // фактическое число команд — для границ тира/процента
@@ -79,12 +85,18 @@ export default function TeamCabinet() {
 
     async function load() {
       try {
-        // getMyTeam и getGames независимы — грузим параллельно (был водопад из трёх
-        // последовательных сетевых раундов).
-        const [team, gs] = await Promise.all([getMyTeam(), getGames()])
+        // resolveMyTeam и getGames независимы — грузим параллельно (был водопад из трёх
+        // последовательных сетевых раундов). resolveMyTeam сам лечит рассинхрон анонимной
+        // сессии (перепривязка по сохранённому коду), поэтому здесь только разбор итога.
+        const [teamRes, gs] = await Promise.all([resolveMyTeam(), getGames()])
         if (cancelled) return
+
+        // Игрок, но команда не подтвердилась даже после перепривязки — на экран входа.
+        if (teamRes.status === 'broken') { setSessionBroken(true); return }
+        // Настоящий администратор — корректный текст «только для команд» покажет рендер.
+        if (teamRes.status === 'admin') { setMe(null); return }
+        const team = teamRes.team
         setMe(team)
-        if (!team) { setLoading(false); return }
 
         const cur = pickCurrentGame(gs)
         // Состав, рейтинг и баллы НЕ зависят от текущей игры — грузим их всегда, в том
@@ -366,6 +378,28 @@ export default function TeamCabinet() {
 
   if (loadError) {
     return <ErrorCard title="Не удалось загрузить кабинет" />
+  }
+
+  // Игрок с рассинхронённой сессией: команда на месте, но анонимный вход не подтвердился
+  // (частый случай — корпоративная сеть банка). Честное «войдите заново», а НЕ ложное
+  // «вы администратор». Кнопка чистит локальную сессию и уводит на экран входа.
+  if (sessionBroken) {
+    return (
+      <div className="glass rounded-glass p-8 text-center">
+        <p className="font-display text-lg font-bold">Нужно войти заново</p>
+        <p className="mx-auto mt-1 max-w-md text-sm text-ink-soft">
+          Не получилось подтвердить вход команды — так бывает из-за корпоративной сети.
+          Данные на месте, просто войдите ещё раз по коду команды.
+        </p>
+        <button
+          type="button"
+          onClick={() => { void signOut().then(() => navigate('/', { replace: true })) }}
+          className="tap mt-4 rounded-full bg-alfa px-5 py-2.5 text-sm font-bold text-white shadow sf-hover"
+        >
+          Войти заново
+        </button>
+      </div>
+    )
   }
 
   if (!me) {
