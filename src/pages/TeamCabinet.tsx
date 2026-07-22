@@ -37,6 +37,14 @@ function hasMeaningfulText(s: string): boolean {
   return /[\p{L}\p{N}]/u.test(s)
 }
 
+/** Реальная сдача = есть осмысленный текст ИЛИ прикреплённый файл. Пустая строка в
+ *  answers (напр. выбрали файл, а его загрузку заблокировал корпоративный контур, и
+ *  текста не было) сдачей НЕ считается — иначе при следующем заходе кабинет показывал бы
+ *  ложное «Ответ отправлен» на пустой заготовке, хотя команде сдавать ещё нечего. */
+function isRealSubmission(answer: string, fileName: string | null): boolean {
+  return hasMeaningfulText(answer) || !!fileName
+}
+
 export default function TeamCabinet() {
   const navigate = useNavigate()
   const [me, setMe] = useState<TeamInfo | null>(null)
@@ -121,7 +129,7 @@ export default function TeamCabinet() {
         setRoster(r)
         setScores(s)
         setCases(c)
-        if (sub) { setAnswer(sub.answer); setFileAttached(sub.fileName); setSent(true) }
+        if (sub) { setAnswer(sub.answer); setFileAttached(sub.fileName); setSent(isRealSubmission(sub.answer, sub.fileName)) }
         // sub.filePath — путь к ранее загруженному файлу; новый файл (file) заменит его
 
       } catch {
@@ -192,7 +200,7 @@ export default function TeamCabinet() {
           ])
           setCases(c)
           setOpenCases(new Set())
-          if (sub) { setAnswer(sub.answer); setFileAttached(sub.fileName); setSent(true) }
+          if (sub) { setAnswer(sub.answer); setFileAttached(sub.fileName); setSent(isRealSubmission(sub.answer, sub.fileName)) }
           else { setAnswer(''); setFileAttached(null); setSent(false) }
           setFile(null)
         }
@@ -342,7 +350,9 @@ export default function TeamCabinet() {
         // Текст сохранён, а файл — нет. НЕ показываем зелёный «отправлено» (иначе экран
         // одновременно «успех» и «ошибка»): держим форму открытой (sent остаётся false),
         // чтобы капитан прикрепил файл повторно. Текст уже в БД — не потеряется.
-        setSendError('Текст сохранён, но файл не прикрепился. Прикрепите его ещё раз и нажмите «Отправить».')
+        setSendError(hasMeaningfulText(answer)
+          ? 'Текст сохранён, но файл не прикрепился. Прикрепите его ещё раз и нажмите «Отправить».'
+          : 'Файл не удалось прикрепить (возможно, запрет вашей организации). Впишите ответ текстом — это тоже засчитывается, либо приложите файл ещё раз.')
         return
       }
       setFile(null)
