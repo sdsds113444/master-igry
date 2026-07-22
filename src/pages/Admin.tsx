@@ -50,6 +50,9 @@ export default function Admin() {
   const [chatTeam, setChatTeam] = useState<AdminTeamRow | null>(null)
   // Ответы команд по выбранной игре (текст + путь к файлу) — источник «сдал/не сдал» и просмотра.
   const [answers, setAnswers] = useState<Record<string, { answer: string; filePath: string | null }>>({})
+  // Команды, по которым УЖЕ есть строка оценки (= проверены). Красная точка «сдали, но не
+  // проверено» горит у тех, кто прислал реальный ответ, но кого тут ещё нет. Гаснет при сохранении.
+  const [reviewedTeams, setReviewedTeams] = useState<Set<string>>(new Set())
   const [viewTeam, setViewTeam] = useState<AdminTeamRow | null>(null)
   const [rosterTeam, setRosterTeam] = useState<AdminTeamRow | null>(null) // «провалиться» и посмотреть состав
   // «Пипочка»: по каждой команде — время последнего сообщения от неё в чате с тренером.
@@ -106,6 +109,7 @@ export default function Admin() {
         }
         setGrades(init)
         setAnswers(ans)
+        setReviewedTeams(new Set(Object.keys(scores))) // у кого уже есть оценка — уже проверены
         setPublished(false)
         setSaved(false)
         setDirty(false)
@@ -171,6 +175,18 @@ export default function Admin() {
     setChatTeam(t)
   }, [mentorLatest])
 
+  // Красная точка «сдали, но не проверено»: реальный ответ (текст/файл) есть, а строки
+  // оценки по команде ещё нет. Пустая заготовка в answers (без текста и файла) точку НЕ даёт.
+  const pendingReview = useMemo(() => {
+    const s = new Set<string>()
+    for (const tid of Object.keys(answers)) {
+      const a = answers[tid]
+      const real = !!a && (a.answer.trim().length > 0 || !!a.filePath)
+      if (real && !reviewedTeams.has(tid)) s.add(tid)
+    }
+    return s
+  }, [answers, reviewedTeams])
+
   const submittedCount = Object.values(grades).filter((g) => g.submitted).length
   const isPublished = games.find((g) => g.id === gameId)?.status === 'current'
 
@@ -216,6 +232,8 @@ export default function Admin() {
         await gradeMany(changed.map((t) => ({ teamId: t.id, gameId, ...scoreWrite(grades[t.id]) })))
       }
       setSaved(true)
+      // Сохранённые команды теперь проверены — гасим у них красную точку «на проверку».
+      setReviewedTeams((prev) => { const n = new Set(prev); changed.forEach((t) => n.add(t.id)); return n })
       setDirty(false)
       setDirtyTeams(new Set())
     } catch {
@@ -344,6 +362,7 @@ export default function Admin() {
                     t={t}
                     g={grades[t.id]}
                     hasAnswer={!!answers[t.id]}
+                    needsReview={pendingReview.has(t.id)}
                     unread={mentorUnread.has(t.id)}
                     onUpd={upd}
                     onChat={openTeamChat}
@@ -364,6 +383,7 @@ export default function Admin() {
                 t={t}
                 g={grades[t.id]}
                 hasAnswer={!!answers[t.id]}
+                needsReview={pendingReview.has(t.id)}
                 unread={mentorUnread.has(t.id)}
                 onUpd={upd}
                 onChat={openTeamChat}
@@ -638,11 +658,12 @@ function FeedbackPanel() {
  *  команда, чей grade изменился, а не все ~30 строк на каждый ввод символа. Опирается
  *  на СТАБИЛЬНЫЕ пропсы onUpd/onChat/onView (см. useCallback/setState в Admin). */
 const GradeRowDesktop = memo(function GradeRowDesktop({
-  t, g, hasAnswer, unread, onUpd, onChat, onView, onRoster,
+  t, g, hasAnswer, needsReview, unread, onUpd, onChat, onView, onRoster,
 }: {
   t: AdminTeamRow
   g: Grade
   hasAnswer: boolean
+  needsReview: boolean
   unread: boolean
   onUpd: (id: string, patch: Partial<Grade>) => void
   onChat: (t: AdminTeamRow) => void
@@ -673,11 +694,12 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
           <button
             onClick={() => onView(t)}
             disabled={!hasAnswer}
-            aria-label={`Ответ команды ${t.name}`}
-            title={hasAnswer ? 'Посмотреть ответ команды' : 'Команда ещё не сдала ответ'}
-            className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa disabled:opacity-30"
+            aria-label={needsReview ? `Ответ команды ${t.name} — не проверен` : `Ответ команды ${t.name}`}
+            title={hasAnswer ? (needsReview ? 'Сдали — не проверено' : 'Посмотреть ответ команды') : 'Команда ещё не сдала ответ'}
+            className="tap relative grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa disabled:opacity-30"
           >
             <FileText size={16} />
+            {needsReview && <span className="absolute right-0.5 top-0.5 h-2.5 w-2.5 rounded-full bg-alfa ring-2 ring-white" />}
           </button>
           <button
             onClick={() => onChat(t)}
@@ -743,11 +765,12 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
 
 /** Карточка оценивания одной команды для мобильной раскладки (замена строки таблицы). */
 const GradeCard = memo(function GradeCard({
-  t, g, hasAnswer, unread, onUpd, onChat, onView, onRoster,
+  t, g, hasAnswer, needsReview, unread, onUpd, onChat, onView, onRoster,
 }: {
   t: AdminTeamRow
   g: Grade
   hasAnswer: boolean
+  needsReview: boolean
   unread: boolean
   onUpd: (id: string, patch: Partial<Grade>) => void
   onChat: (t: AdminTeamRow) => void
@@ -786,11 +809,12 @@ const GradeCard = memo(function GradeCard({
         <button
           onClick={() => onView(t)}
           disabled={!hasAnswer}
-          aria-label={`Ответ команды ${t.name}`}
-          title={hasAnswer ? 'Посмотреть ответ команды' : 'Команда ещё не сдала ответ'}
-          className="tap grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa disabled:opacity-30"
+          aria-label={needsReview ? `Ответ команды ${t.name} — не проверен` : `Ответ команды ${t.name}`}
+          title={hasAnswer ? (needsReview ? 'Сдали — не проверено' : 'Посмотреть ответ команды') : 'Команда ещё не сдала ответ'}
+          className="tap relative grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-alfa/10 hover:text-alfa disabled:opacity-30"
         >
           <FileText size={16} />
+          {needsReview && <span className="absolute right-0.5 top-0.5 h-2.5 w-2.5 rounded-full bg-alfa ring-2 ring-white" />}
         </button>
         <button
           onClick={() => onChat(t)}
