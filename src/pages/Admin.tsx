@@ -486,8 +486,22 @@ function AnswerView({ team, data, onClose }: {
     setDownloadError('')
     try {
       const url = await getAnswerFileUrl(data.filePath)
-      if (url) window.open(url, '_blank', 'noopener')
-      else setDownloadError('Не удалось получить ссылку на файл. Попробуйте ещё раз.')
+      if (!url) { setDownloadError('Не удалось получить ссылку на файл. Попробуйте ещё раз.'); return }
+      // Скачиваем через blob, а НЕ window.open: открытие окна после await теряет «жест
+      // пользователя» и режется блокировщиком всплывающих окон (особенно Яндекс.Браузер) —
+      // тренер жмёт «Скачать», и ничего не происходит. Плюс download-атрибут для кросс-
+      // доменной ссылки не работает — поэтому тянем файл и отдаём как локальный blob.
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`http ${res.status}`)
+      const blob = await res.blob()
+      const objUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = objUrl
+      a.download = fileName ?? 'answer'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.setTimeout(() => URL.revokeObjectURL(objUrl), 10000)
     } catch {
       setDownloadError('Не удалось скачать файл. Проверьте соединение и попробуйте ещё раз.')
     } finally {
