@@ -6,7 +6,7 @@
 // Все функции async, чтобы сигнатуры не менялись при переключении режима.
 
 import { isSupabaseConfigured, supabase, requireClient, toProxyUrl } from './supabase'
-import { basename } from './ui'
+import { basename, safeStorageName } from './ui'
 import {
   TEAMS, GAMES, FEED, ROSTER_SEED, TEAM_CHAT_SEED,
   type TeamScore, type CaseItem, type Game, type FeedItem,
@@ -736,7 +736,8 @@ export async function submitAnswer(input: SubmitInput): Promise<{ fileUploaded: 
   let filePath: string | undefined // undefined → не трогаем уже сохранённый файл
   let fileUploaded = false
   if (input.file) {
-    const safeName = input.file.name.replace(/[^\wа-яА-ЯёЁ.\- ]+/g, '_')
+    // Транслитерируем имя в ASCII: Supabase Storage отклоняет кириллические ключи (400).
+    const safeName = safeStorageName(input.file.name)
     const path = `${input.teamId}/${input.gameId}/${safeName}`
     const { error: upErr } = await sb.storage.from('answers').upload(path, input.file, {
       upsert: true,

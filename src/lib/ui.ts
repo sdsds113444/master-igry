@@ -29,6 +29,37 @@ export function basename(path: string, fallback = 'файл'): string {
   return path.split('/').pop() || fallback
 }
 
+const CYR: Record<string, string> = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i',
+  й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't',
+  у: 'u', ф: 'f', х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '',
+  э: 'e', ю: 'yu', я: 'ya',
+}
+
+/** Безопасное имя объекта для Supabase Storage. КРИТИЧНО: Storage отклоняет ключи с
+ *  кириллицей (HTTP 400 «Invalid key»), а у нас все команды называют файлы по-русски —
+ *  без этого НИ ОДИН русский файл не загружался (проверено по логам: латиница → 200,
+ *  кириллица → 400). Транслитерируем кириллицу в латиницу, всё прочее не из
+ *  [A-Za-z0-9._-] заменяем на «_», расширение сохраняем. Пустая основа → 'file'. */
+export function safeStorageName(name: string): string {
+  const dot = name.lastIndexOf('.')
+  const rawBase = dot > 0 ? name.slice(0, dot) : name
+  const rawExt = dot > 0 ? name.slice(dot + 1) : ''
+  const translit = (s: string) =>
+    s.replace(/[а-яё]/gi, (ch) => {
+      const lo = ch.toLowerCase()
+      const t = Object.prototype.hasOwnProperty.call(CYR, lo) ? CYR[lo] : '_'
+      return ch === lo || t === '' ? t : t[0].toUpperCase() + t.slice(1)
+    })
+  const clean = (s: string) =>
+    translit(s).replace(/[^A-Za-z0-9._-]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '')
+  // Ведущие точки убираем: имя из одной точки-префикса (.gitignore, .file) иначе
+  // дало бы «скрытый» ключ вида '.pdf' в обход фолбэка 'file'.
+  const base = clean(rawBase).replace(/^\.+/, '') || 'file'
+  const ext = clean(rawExt).toLowerCase()
+  return ext ? `${base}.${ext}` : base
+}
+
 /** Дедлайн сдачи ответа недели. Один источник вместо трёх захардкоженных строк. */
 export const DEADLINE = 'Пятница, 13:00 МСК'
 

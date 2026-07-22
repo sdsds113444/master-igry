@@ -1,5 +1,32 @@
 import { describe, it, expect } from 'vitest'
-import { rankTier, rankPercent, diffBadge, teamAvatar } from './ui'
+import { rankTier, rankPercent, diffBadge, teamAvatar, safeStorageName } from './ui'
+
+describe('safeStorageName (ключ Supabase Storage — кириллица ломала загрузку 400)', () => {
+  it('транслитерирует русское имя в латиницу, расширение сохраняет', () => {
+    expect(safeStorageName('Кейсы ФЛ исправлен.xlsx')).toBe('Keysy_FL_ispravlen.xlsx')
+    expect(safeStorageName('ИГРА ПЕРВОЕ ДЗ.xlsx')).toBe('IGRA_PERVOE_DZ.xlsx')
+  })
+  it('латинское имя не трогает (кроме нормализации разделителей)', () => {
+    expect(safeStorageName('report-2026.pdf')).toBe('report-2026.pdf')
+  })
+  it('пробелы и прочие символы → _ , без кратных/крайних подчёркиваний', () => {
+    expect(safeStorageName('  ответ команды  .docx')).toBe('otvet_komandy.docx')
+  })
+  it('расширение приводит к нижнему регистру', () => {
+    expect(safeStorageName('Отчёт.XLSX')).toBe('Otchet.xlsx')
+  })
+  it('имя без основы (одна кириллица) не даёт пустой ключ', () => {
+    expect(safeStorageName('ъь.pdf')).toBe('file.pdf')
+  })
+  it('имя с ведущей точкой не даёт скрытый ключ', () => {
+    expect(safeStorageName('.hidden.pdf')).toBe('hidden.pdf')
+    expect(safeStorageName('.gitignore')).toBe('gitignore')
+    expect(safeStorageName('.')).toBe('file')
+  })
+  it('результат — только безопасные для ключа символы', () => {
+    expect(safeStorageName('Кейсы №1 (черновик)!.xlsx')).toMatch(/^[A-Za-z0-9._-]+$/)
+  })
+})
 
 describe('rankTier', () => {
   it('топ-3 — отдельный тир', () => {
