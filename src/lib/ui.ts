@@ -63,6 +63,20 @@ export function safeStorageName(name: string): string {
 /** Дедлайн сдачи ответа недели. Один источник вместо трёх захардкоженных строк. */
 export const DEADLINE = 'Пятница, 13:00 МСК'
 
+/** Сколько осталось до момента, коротко и по-русски: «1 дн 3 ч», «4 ч 12 мин»,
+ *  «7 мин 30 с». Общий формат для плашки и модалки дедлайна. */
+export function humanTimeLeft(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  const d = Math.floor(s / 86400)
+  const h = Math.floor((s % 86400) / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  if (d > 0) return `${d} дн ${h} ч`
+  if (h > 0) return `${h} ч ${m} мин`
+  if (m > 0) return `${m} мин ${sec} с`
+  return `${sec} с`
+}
+
 /** Доступная метка сложности кейса: светлый тон-подложка + тёмный текст того же
  *  семейства. Раньше был белый текст на насыщенном фоне (1.9–3.1:1 — провал WCAG),
  *  теперь каждая пара ≥4.5:1. Ключи совпадают с SQL-констрейнтом cases.difficulty. */

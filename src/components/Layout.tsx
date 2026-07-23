@@ -5,6 +5,7 @@ import Background from './Background'
 import ThemeToggle from './ThemeToggle'
 import FeedbackModal from './FeedbackModal'
 import DeadlineBanner from './DeadlineBanner'
+import DeadlineModal from './DeadlineModal'
 import { getSession, signOut, getGames, pickCurrentGame, getSubmission } from '../lib/db'
 import { teamAvatar } from '../lib/ui'
 
@@ -46,6 +47,22 @@ export default function Layout() {
     window.addEventListener('focus', load)
     return () => { stopped = true; window.removeEventListener('focus', load) }
   }, [teamId, role])
+
+  // Модалка поверх всего — при заходе команде, которая ещё не сдала. Показываем ОДИН раз
+  // за сессию вкладки и отдельно для «спокойной» и «срочной» стадии: если выскакивать на
+  // каждую перезагрузку, её закрывают рефлекторно и она перестаёт работать.
+  const [modalOpen, setModalOpen] = useState(false)
+  useEffect(() => {
+    if (!deadline?.at || deadline.submitted) return
+    const left = new Date(deadline.at).getTime() - Date.now()
+    if (!(left > 0)) return // дедлайн прошёл — не выскакиваем, хватит плашки
+    const key = `mi.deadlineModal:${deadline.at}:${left <= 6 * 3600 * 1000 ? 'urgent' : 'normal'}`
+    try {
+      if (sessionStorage.getItem(key)) return
+      sessionStorage.setItem(key, '1')
+    } catch { /* приватный режим — просто покажем */ }
+    setModalOpen(true)
+  }, [deadline])
 
   async function handleSignOut() {
     await signOut()
@@ -153,6 +170,13 @@ export default function Layout() {
       <div className="px-4 pt-3">
         <DeadlineBanner deadlineAt={deadline?.at ?? null} submitted={deadline?.submitted ?? false} />
       </div>
+
+      <DeadlineModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onGo={() => { setModalOpen(false); navigate('/team') }}
+        deadlineAt={deadline?.at ?? null}
+      />
 
       <main id="main" className="mx-auto max-w-6xl px-4 pb-16 pt-6">
         <Outlet />

@@ -1,5 +1,25 @@
 import { describe, it, expect } from 'vitest'
-import { rankTier, rankPercent, diffBadge, teamAvatar, safeStorageName } from './ui'
+import { rankTier, rankPercent, diffBadge, teamAvatar, safeStorageName, humanTimeLeft } from './ui'
+
+describe('humanTimeLeft (отсчёт до дедлайна)', () => {
+  const m = 60 * 1000, h = 60 * m, d = 24 * h
+  it('больше суток — дни и часы', () => {
+    expect(humanTimeLeft(d + 3 * h)).toBe('1 дн 3 ч')
+  })
+  it('меньше суток — часы и минуты', () => {
+    expect(humanTimeLeft(4 * h + 12 * m)).toBe('4 ч 12 мин')
+  })
+  it('меньше часа — минуты и секунды', () => {
+    expect(humanTimeLeft(7 * m + 30 * 1000)).toBe('7 мин 30 с')
+  })
+  it('меньше минуты — только секунды', () => {
+    expect(humanTimeLeft(45 * 1000)).toBe('45 с')
+  })
+  it('ноль и отрицательное не дают мусора', () => {
+    expect(humanTimeLeft(0)).toBe('0 с')
+    expect(humanTimeLeft(-5000)).toBe('0 с')
+  })
+})
 
 describe('safeStorageName (ключ Supabase Storage — кириллица ломала загрузку 400)', () => {
   it('транслитерирует русское имя в латиницу, расширение сохраняет', () => {

@@ -1,18 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AlarmClock, Lock } from 'lucide-react'
-
-/** Сколько осталось, коротко: «1 дн 3 ч», «4 ч 12 мин», «7 мин 30 с». */
-function humanLeft(ms: number): string {
-  const s = Math.max(0, Math.floor(ms / 1000))
-  const d = Math.floor(s / 86400)
-  const h = Math.floor((s % 86400) / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = s % 60
-  if (d > 0) return `${d} дн ${h} ч`
-  if (h > 0) return `${h} ч ${m} мин`
-  if (m > 0) return `${m} мин ${sec} с`
-  return `${sec} с`
-}
+import { humanTimeLeft } from '../lib/ui'
 
 /** Крупная плашка дедлайна для команд: большой обратный отсчёт + короткий призыв.
  *
@@ -64,7 +52,7 @@ export default function DeadlineBanner({ deadlineAt, submitted }: {
       />
       <div className="min-w-0">
         <div className="text-xl font-extrabold leading-tight tracking-tight sm:text-3xl">
-          {urgent ? 'Осталось' : 'До дедлайна'} {humanLeft(left)}
+          {urgent ? 'Осталось' : 'До дедлайна'} {humanTimeLeft(left)}
         </div>
         <div className={`mt-0.5 text-sm font-semibold ${urgent ? 'text-white/85' : 'text-ink-soft'}`}>
           {urgent ? 'Успейте сдать ответ!' : 'Поторопитесь сдать ответ'}
