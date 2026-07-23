@@ -18,6 +18,9 @@ export interface Game {
   /** Ссылки на ассеты из БД (когда игра приходит из Supabase). В демо — не заданы. */
   video_url?: string | null
   file_url?: string | null
+  /** Дедлайн сдачи (ISO). Из него живёт плашка обратного отсчёта, и по нему же RLS
+   *  закрывает приём ответов. null — дедлайн не задан, приём не ограничен. */
+  deadline_at?: string | null
 }
 
 export interface TeamScore {
@@ -57,6 +60,16 @@ export interface CaseItem {
   image?: string
 }
 
+/** Демо-дедлайн: ближайшая пятница 13:00. Нужен, чтобы плашка обратного отсчёта была
+ *  видна и в демо-режиме — иначе она не попадает в приёмку и «на демо было иначе». */
+function nextFriday1300(): string {
+  const d = new Date()
+  d.setHours(13, 0, 0, 0)
+  const untilFriday = (5 - d.getDay() + 7) % 7
+  d.setDate(d.getDate() + (untilFriday === 0 && Date.now() > d.getTime() ? 7 : untilFriday))
+  return d.toISOString()
+}
+
 /* ---- 7 игр сезона ---- */
 export const GAMES: Game[] = [
   // Демо-статусы согласованы с лентой FEED (неделя 4, «Эмпатия» идёт, итоги недели 3):
@@ -64,7 +77,7 @@ export const GAMES: Game[] = [
   { id: 'detective', num: 1, week: 1, title: 'Детектив КЦ', skill: 'Найти боль клиента и решить в одном касании', emoji: '🕵️', accent: '#ef3124', status: 'done' },
   { id: 'noforward', num: 2, week: 2, title: 'Не перекладывай!', skill: 'Взять проблему на себя, не переводить', emoji: '🙅', accent: '#f0782b', status: 'done' },
   { id: 'iknow', num: 3, week: 3, title: 'Продуктовый «Я знаю всё»', skill: 'Знание продуктов и регламентов', emoji: '🧠', accent: '#e8b21e', status: 'done' },
-  { id: 'empathy', num: 4, week: 4, title: 'Эмпатия в реальном времени', skill: 'Услышать эмоцию раньше, чем ответить', emoji: '💗', accent: '#d6338f', status: 'current' },
+  { id: 'empathy', num: 4, week: 4, title: 'Эмпатия в реальном времени', skill: 'Услышать эмоцию раньше, чем ответить', emoji: '💗', accent: '#d6338f', status: 'current', deadline_at: nextFriday1300() },
   { id: 'onecall', num: 5, week: 5, title: 'Один звонок — одно решение', skill: 'Решать вопрос за один контакт стабильно', emoji: '🎯', accent: '#8b46d6', status: 'locked' },
   { id: 'captains', num: 6, week: 6, title: 'Битва капитанов', skill: 'Капитан показывает всё на письме', emoji: '⚔️', accent: '#3f74e0', status: 'locked' },
   { id: 'marathon', num: 7, week: 7, title: 'Альфа-марафон сезона', skill: 'Финал: публичная аттестация площадки', emoji: '🏁', accent: '#1ea672', status: 'locked' },

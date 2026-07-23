@@ -851,7 +851,7 @@ export async function getAnswersForGame(gameId: string): Promise<Record<string, 
 export async function getGames(): Promise<Game[]> {
   if (!isSupabaseConfigured) return GAMES
   const sb = requireClient()
-  const { data, error } = await sb.from('games').select('id, num, week, title, skill, emoji, accent, status, video_url, file_url').order('num')
+  const { data, error } = await sb.from('games').select('id, num, week, title, skill, emoji, accent, status, video_url, file_url, deadline_at').order('num')
   throwOn(error)
   return (data as Game[] | null)?.length ? (data as Game[]) : GAMES
 }

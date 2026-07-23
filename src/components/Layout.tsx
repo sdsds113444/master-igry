@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Link, Outlet, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Users, ShieldCheck, LogOut, BookOpen, MessageSquarePlus } from 'lucide-react'
 import Background from './Background'
 import ThemeToggle from './ThemeToggle'
 import FeedbackModal from './FeedbackModal'
-import { getSession, signOut } from '../lib/db'
+import DeadlineBanner from './DeadlineBanner'
+import { getSession, signOut, getGames, pickCurrentGame, getSubmission } from '../lib/db'
 import { teamAvatar } from '../lib/ui'
 
 const linkBase =
@@ -14,6 +15,33 @@ export default function Layout() {
   const navigate = useNavigate()
   const session = getSession()
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+
+  // Дедлайн активного задания + сдала ли уже эта команда — для плашки обратного отсчёта.
+  // Layout живёт всю сессию (страницы меняются внутри Outlet), поэтому запрос идёт один
+  // раз, плюс обновление при возврате на вкладку (чтобы плашка пропала после сдачи).
+  const teamId = session?.teamId ?? null
+  const role = session?.role
+  const [deadlineAt, setDeadlineAt] = useState<string | null>(null)
+  const [submitted, setSubmitted] = useState(false)
+
+  useEffect(() => {
+    if (role === 'admin' || !teamId) return
+    let stopped = false
+    async function load() {
+      try {
+        const cur = pickCurrentGame(await getGames())
+        if (stopped) return
+        setDeadlineAt(cur?.deadline_at ?? null)
+        if (!cur) return
+        const sub = await getSubmission(teamId!, cur.id)
+        if (stopped) return
+        setSubmitted(!!sub && (sub.answer.trim().length > 0 || !!sub.fileName))
+      } catch { /* тихо: плашка не критична, без неё сайт работает как прежде */ }
+    }
+    load()
+    window.addEventListener('focus', load)
+    return () => { stopped = true; window.removeEventListener('focus', load) }
+  }, [teamId, role])
 
   async function handleSignOut() {
     await signOut()
@@ -116,6 +144,11 @@ export default function Layout() {
           </div>
         </nav>
       </header>
+
+      {/* Дедлайн задания: видна на всех страницах, пока команда не сдала. */}
+      <div className="px-4 pt-3">
+        <DeadlineBanner deadlineAt={deadlineAt} submitted={submitted} />
+      </div>
 
       <main id="main" className="mx-auto max-w-6xl px-4 pb-16 pt-6">
         <Outlet />
