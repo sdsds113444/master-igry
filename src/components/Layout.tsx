@@ -21,8 +21,10 @@ export default function Layout() {
   // раз, плюс обновление при возврате на вкладку (чтобы плашка пропала после сдачи).
   const teamId = session?.teamId ?? null
   const role = session?.role
-  const [deadlineAt, setDeadlineAt] = useState<string | null>(null)
-  const [submitted, setSubmitted] = useState(false)
+  // Дедлайн и «сдано ли» держим ОДНИМ состоянием и ставим за один раз: если обновлять
+  // их по отдельности, плашка успевает мигнуть — сначала прилетает дедлайн (плашка
+  // появляется), и только потом ответ про сдачу (плашка прячется).
+  const [deadline, setDeadline] = useState<{ at: string | null; submitted: boolean } | null>(null)
 
   useEffect(() => {
     if (role === 'admin' || !teamId) return
@@ -31,11 +33,13 @@ export default function Layout() {
       try {
         const cur = pickCurrentGame(await getGames())
         if (stopped) return
-        setDeadlineAt(cur?.deadline_at ?? null)
-        if (!cur) return
+        if (!cur) { setDeadline({ at: null, submitted: false }); return }
         const sub = await getSubmission(teamId!, cur.id)
         if (stopped) return
-        setSubmitted(!!sub && (sub.answer.trim().length > 0 || !!sub.fileName))
+        setDeadline({
+          at: cur.deadline_at ?? null,
+          submitted: !!sub && (sub.answer.trim().length > 0 || !!sub.fileName),
+        })
       } catch { /* тихо: плашка не критична, без неё сайт работает как прежде */ }
     }
     load()
@@ -147,7 +151,7 @@ export default function Layout() {
 
       {/* Дедлайн задания: видна на всех страницах, пока команда не сдала. */}
       <div className="px-4 pt-3">
-        <DeadlineBanner deadlineAt={deadlineAt} submitted={submitted} />
+        <DeadlineBanner deadlineAt={deadline?.at ?? null} submitted={deadline?.submitted ?? false} />
       </div>
 
       <main id="main" className="mx-auto max-w-6xl px-4 pb-16 pt-6">
