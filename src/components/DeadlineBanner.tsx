@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlarmClock, Lock } from 'lucide-react'
 
-/** Сколько осталось, человеческим языком: «1 дн 3 ч», «4 ч 12 мин», «7 мин 30 с». */
+/** Сколько осталось, коротко: «1 дн 3 ч», «4 ч 12 мин», «7 мин 30 с». */
 function humanLeft(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000))
   const d = Math.floor(s / 86400)
@@ -14,11 +14,11 @@ function humanLeft(ms: number): string {
   return `${sec} с`
 }
 
-/** Плашка дедлайна для команд: живой обратный отсчёт с нарастающей срочностью.
+/** Крупная плашка дедлайна для команд: большой обратный отсчёт + короткий призыв.
  *
- *  Показывается ТОЛЬКО тем, кто ещё не сдал — смысл плашки в том, чтобы напомнить
- *  и не дёргать тех, кто уже всё прислал. За 6 часов до дедлайна становится красной
- *  во всю ширину (тогда её невозможно пропустить), после дедлайна — «приём закрыт».
+ *  Показывается ТОЛЬКО тем, кто ещё не сдал — смысл в том, чтобы подтолкнуть, а не
+ *  мозолить глаза тем, кто уже прислал. За 6 часов до дедлайна становится красной
+ *  во всю ширину, после дедлайна — «приём закрыт».
  *
  *  Таймер живёт в состоянии ЭТОГО компонента, поэтому раз в секунду перерисовывается
  *  только плашка, а не весь Layout со страницами. */
@@ -37,18 +37,15 @@ export default function DeadlineBanner({ deadlineAt, submitted }: {
   if (Number.isNaN(end)) return null
 
   const left = end - now
-  const when = new Date(end).toLocaleString('ru', {
-    weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
-  })
 
   if (left <= 0) {
     return (
       <div
         role="status"
-        className="mx-auto flex max-w-6xl items-center gap-2.5 rounded-2xl sf-2 px-4 py-3 text-sm font-semibold text-ink-soft"
+        className="mx-auto flex max-w-6xl items-center justify-center gap-2.5 rounded-2xl sf-2 px-5 py-4 text-base font-bold text-ink-soft"
       >
-        <Lock size={16} className="shrink-0" />
-        Приём ответов по этому заданию закрыт ({when}).
+        <Lock size={20} className="shrink-0" />
+        Приём ответов закрыт
       </div>
     )
   }
@@ -57,14 +54,22 @@ export default function DeadlineBanner({ deadlineAt, submitted }: {
   return (
     <div
       role="status"
-      className={`mx-auto flex max-w-6xl flex-wrap items-center gap-x-2.5 gap-y-1 rounded-2xl px-4 py-3 text-sm font-bold ${
-        urgent ? 'bg-alfa text-white shadow-lg' : 'bg-alfa/5 text-ink'
+      className={`mx-auto flex max-w-6xl items-center gap-4 rounded-2xl px-5 py-4 sm:px-6 sm:py-5 ${
+        urgent ? 'bg-alfa text-white shadow-lg' : 'bg-alfa/10 text-ink'
       }`}
     >
-      <AlarmClock size={17} className={`shrink-0 ${urgent ? 'animate-pulse' : 'text-alfa'}`} />
-      <span>{urgent ? 'Успейте сдать ответ!' : 'Не забудьте сдать ответ.'}</span>
-      <span className="font-extrabold">До дедлайна {humanLeft(left)}</span>
-      <span className={`font-semibold ${urgent ? 'text-white/80' : 'text-ink-soft'}`}>· {when}</span>
+      <AlarmClock
+        size={34}
+        className={`shrink-0 ${urgent ? 'animate-pulse' : 'text-alfa'}`}
+      />
+      <div className="min-w-0">
+        <div className="text-xl font-extrabold leading-tight tracking-tight sm:text-3xl">
+          {urgent ? 'Осталось' : 'До дедлайна'} {humanLeft(left)}
+        </div>
+        <div className={`mt-0.5 text-sm font-semibold ${urgent ? 'text-white/85' : 'text-ink-soft'}`}>
+          {urgent ? 'Успейте сдать ответ!' : 'Поторопитесь сдать ответ'}
+        </div>
+      </div>
     </div>
   )
 }
