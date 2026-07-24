@@ -6,6 +6,7 @@ import ThemeToggle from './ThemeToggle'
 import FeedbackModal from './FeedbackModal'
 import DeadlineBanner from './DeadlineBanner'
 import DeadlineModal from './DeadlineModal'
+import { URM_SEEN_KEY } from './UrmNoticeModal'
 import { getSession, signOut, getGames, pickCurrentGame, getSubmission } from '../lib/db'
 import { teamAvatar } from '../lib/ui'
 
@@ -54,6 +55,9 @@ export default function Layout() {
   const [modalOpen, setModalOpen] = useState(false)
   useEffect(() => {
     if (!deadline?.at || deadline.submitted) return
+    // Пока не закрыто одноразовое окно про УРМ — не выскакиваем поверх него: две
+    // модалки разом сбивают с толку. Дедлайн-модалка покажется следующим заходом/фокусом.
+    try { if (!localStorage.getItem(URM_SEEN_KEY)) return } catch { /* приватный режим — покажем как обычно */ }
     const left = new Date(deadline.at).getTime() - Date.now()
     if (!(left > 0)) return // дедлайн прошёл — не выскакиваем, хватит плашки
     const key = `mi.deadlineModal:${deadline.at}:${left <= 6 * 3600 * 1000 ? 'urgent' : 'normal'}`

@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Loader from './components/Loader'
+import UrmNoticeModal from './components/UrmNoticeModal'
 import { getSession, reconcileSession } from './lib/db'
 import { initPing } from './lib/ping'
 
@@ -37,17 +38,22 @@ export default function App() {
   }, [navigate])
 
   return (
-    <Suspense fallback={<Loader minH="100vh" />}>
-      <Routes>
-        <Route path="/" element={<Login />} />
-        <Route element={<RequireSession><Layout /></RequireSession>}>
-          <Route path="/board" element={<Board />} />
-          <Route path="/team" element={<TeamCabinet />} />
-          <Route path="/rules" element={<Rules />} />
-          <Route path="/admin" element={<RequireAdmin><Admin /></RequireAdmin>} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+    <>
+      {/* Глобально: одноразовое предупреждение про нестабильность на рабочем УРМ.
+          Показывается поверх любой страницы, чтобы застать и уже вошедшие команды. */}
+      <UrmNoticeModal />
+      <Suspense fallback={<Loader minH="100vh" />}>
+        <Routes>
+          <Route path="/" element={<Login />} />
+          <Route element={<RequireSession><Layout /></RequireSession>}>
+            <Route path="/board" element={<Board />} />
+            <Route path="/team" element={<TeamCabinet />} />
+            <Route path="/rules" element={<Rules />} />
+            <Route path="/admin" element={<RequireAdmin><Admin /></RequireAdmin>} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+    </>
   )
 }

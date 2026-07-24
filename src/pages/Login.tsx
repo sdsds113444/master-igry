@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, KeyRound, Loader2, Sparkles } from 'lucide-react'
+import { ArrowRight, KeyRound, Loader2, Sparkles, MonitorSmartphone } from 'lucide-react'
 import Background from '../components/Background'
 import ThemeToggle from '../components/ThemeToggle'
 import { getSession, signInByCode, normalizeCode, TooManyAttemptsError, MOCK_ADMIN_CODE } from '../lib/db'
@@ -145,6 +145,16 @@ export default function Login() {
               ? <>Код команды выдаёт организатор. Нет кода — напишите тренеру.</>
               : <>Демо-режим: код команды (напр. <b>KOYA-04</b>) открывает доску, <b>{MOCK_ADMIN_CODE}</b> — админку.</>}
           </p>
+
+          {/* Постоянная плашка про нестабильность на рабочем УРМ — видят все при входе. */}
+          <div className="mt-3 flex items-start gap-2.5 rounded-2xl bg-status-amber/10 px-3.5 py-3 text-xs leading-relaxed">
+            <MonitorSmartphone size={16} className="mt-0.5 shrink-0 text-status-amber" />
+            <span className="text-ink">
+              <b>На рабочем компьютере (УРМ)</b> сайт может работать нестабильно из-за ограничений
+              банковской сети. Если код не подходит или страница не грузится — зайдите{' '}
+              <b>с телефона</b> (мобильный интернет) или <b>с домашнего компьютера</b>.
+            </span>
+          </div>
         </div>
       </div>
     </div>
