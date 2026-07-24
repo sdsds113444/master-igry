@@ -43,7 +43,9 @@ export function gradeTotal(g: GradeParts): number {
   })
 }
 
-/** Полная строка оценивания в админке (чекбоксы + числа + текст ОС). */
+/** Полная строка оценивания в админке (чекбоксы + числа + текст ОС + файл ОС).
+ *  feedbackFile/Name — УЖЕ разрешённые значения (после загрузки нового файла в saveAll),
+ *  сюда попадает либо ранее сохранённый путь, либо путь только что загруженного файла. */
 export interface GradeFormRow {
   submitted: boolean
   cases: number
@@ -51,6 +53,8 @@ export interface GradeFormRow {
   vok: number
   superBonusVok: boolean
   feedback: string
+  feedbackFile: string | null
+  feedbackFileName: string | null
 }
 /** Очки, реально записываемые в scores. */
 export interface ScoreWrite {
@@ -59,17 +63,23 @@ export interface ScoreWrite {
   vok: number
   superBonusVok: number
   feedback: string
+  feedbackFile: string | null
+  feedbackFileName: string | null
 }
 /** Перевод строки оценивания → запись в scores. «Не сдала» обнуляет ВСЮ строку
- *  (включая vok/feedback), «сдала» переводит галочки в веса. Вынесено из saveAll
- *  (Admin.tsx), чтобы путь записи в рейтинг покрывался тестами и совпадал с gradeTotal. */
+ *  (включая vok/feedback/файл ОС), «сдала» переводит галочки в веса. Вынесено из
+ *  saveAll (Admin.tsx), чтобы путь записи в рейтинг покрывался тестами и совпадал с
+ *  gradeTotal. Файл ОС обнуляем вместе с остальным: у «не сдавшей» команды не должно
+ *  оставаться висящей ссылки на разбор — она бы показалась в кабинете без баллов. */
 export function scoreWrite(g: GradeFormRow): ScoreWrite {
-  if (!g.submitted) return { cases: 0, bonus: 0, vok: 0, superBonusVok: 0, feedback: '' }
+  if (!g.submitted) return { cases: 0, bonus: 0, vok: 0, superBonusVok: 0, feedback: '', feedbackFile: null, feedbackFileName: null }
   return {
     cases: g.cases,
     bonus: g.bonus ? BONUS_POINTS : 0,
     vok: g.vok,
     superBonusVok: g.superBonusVok ? SUPER_BONUS_VOK_POINTS : 0,
     feedback: g.feedback,
+    feedbackFile: g.feedbackFile,
+    feedbackFileName: g.feedbackFileName,
   }
 }

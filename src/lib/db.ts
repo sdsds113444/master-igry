@@ -14,7 +14,15 @@ import {
 
 export type Role = 'player' | 'admin'
 export interface Session { teamId: string | null; code: string; role: Role; name: string; hue: number }
-export interface ChatMsg { id: string; author: string; text: string; time: string; me: boolean; role: Role }
+/** editedAt — СЕРВЕРНОЕ время последней правки (null = не правили). Хранится как
+ *  время, а не флаг, потому что служит версией строки: снимок истории, выехавший
+ *  до правки, но доехавший после неё, иначе затёр бы уже показанный новый текст.
+ *  canEdit — можно ли его править МНЕ (см. computeCanEdit): решает и клиент, и
+ *  сервер по одному правилу, чтобы карандаш не появлялся там, где RPC откажет. */
+export interface ChatMsg {
+  id: string; author: string; text: string; time: string; me: boolean; role: Role
+  editedAt: string | null; canEdit: boolean
+}
 export interface RatingRow { id: string; rank: number; name: string; site: string; hue: number; total: number }
 export interface TeamInfo {
   id: string; code: string; name: string; site: string; mentor: string; hue: number
@@ -23,7 +31,7 @@ export interface AdminTeamRow { id: string; code: string; name: string; site: st
 /** Игрок состава. id — ключ строки в БД: операции идут по нему, а не по имени
  *  (иначе полные тёзки в команде удалялись/ломались пачкой). */
 export interface RosterMember { id: string; name: string; isCaptain: boolean }
-export interface GradeRow { cases: number; bonus: number; vok: number; superBonusVok: number; feedback: string }
+export interface GradeRow { cases: number; bonus: number; vok: number; superBonusVok: number; feedback: string; feedbackFile: string | null; feedbackFileName: string | null }
 
 // Демо-код админки ТОЛЬКО для офлайн-режима (моки, без реальных данных).
 // Боевой админ-код хранится в БД и НИКОГДА не попадает в репозиторий/бандл.
@@ -55,6 +63,21 @@ export function computeMe(ctx: MeContext, author: string, role: Role, userId?: s
   if (role === 'admin') return false
   if (ctx.uid && userId) return userId === ctx.uid
   return author === ctx.displayName
+}
+
+/** «Могу ли я править это сообщение?» — то же правило, что в серверной RPC
+ *  edit_message: игрок правит только своё (по user_id), тренер — любую реплику
+ *  тренера (учётка общая, с другого устройства auth.uid() другой).
+ *
+ *  Без user_id (сообщения старше миграции message_edit) — нельзя: автора задним
+ *  числом не восстановить, а по подписи давать право правки нельзя, тёзки в
+ *  команде правили бы чужое. Это же условие страхует от рассинхрона деплоя:
+ *  пока миграция не применена, user_id нет ни у кого и карандаш не появляется. */
+export function computeCanEdit(ctx: MeContext, role: Role, userId?: string | null): boolean {
+  if (!userId) return false
+  if (ctx.isAdmin) return role === 'admin'
+  if (role === 'admin') return false
+  return !!ctx.uid && userId === ctx.uid
 }
 
 // ---------- локальная «сессия» (какая команда сейчас вошла) ----------
@@ -120,7 +143,7 @@ function seedRoster(): RosterMember[] {
 }
 const mockRoster: Record<string, RosterMember[]> = {}
 const mockChat: Record<string, ChatMsg[]> = {}
-const mockSubs: Record<string, ((m: ChatMsg) => void)[]> = {}
+const mockSubs: Record<string, ((m: ChatMsg, kind: MsgEventKind) => void)[]> = {}
 const mockSubmissions: Record<string, { answer: string; fileName: string | null }> = {}
 const mockReactions: Record<string, ReactionRow[]> = {}
 const mockReactionSubs: Record<string, ((r: ReactionEvent) => void)[]> = {}
@@ -338,10 +361,34 @@ function hhmm(iso: string): string {
 
 export type ChatChannel = 'team' | 'mentor'
 
+/** Строка таблицы messages в том виде, в каком её отдают и select, и realtime. */
+interface MessageRow {
+  id: string; author: string; text: string; created_at: string; channel: ChatChannel
+  sender_role?: Role; user_id?: string | null; edited_at?: string | null
+}
+
+/** Одна точка превращения строки БД в ChatMsg — чтобы история, realtime и
+ *  фоллбэк-опрос не разъезжались в трактовке «моё»/«изменено»/«можно править». */
+function toChatMsg(ctx: MeContext, m: MessageRow): ChatMsg {
+  const role = m.sender_role ?? 'player'
+  return {
+    id: m.id,
+    author: m.author,
+    text: m.text,
+    time: hhmm(m.created_at),
+    role,
+    me: computeMe(ctx, m.author, role, m.user_id ?? null),
+    editedAt: m.edited_at ?? null,
+    canEdit: computeCanEdit(ctx, role, m.user_id ?? null),
+  }
+}
+
 export async function listMessages(teamId: string, channel: ChatChannel = 'team'): Promise<ChatMsg[]> {
   const key = `${teamId}:${channel}`
   if (!isSupabaseConfigured) {
-    return mockChat[key] ?? (mockChat[key] = channel === 'team' ? TEAM_CHAT_SEED.map((m, i) => ({ id: 's' + i, role: 'player' as Role, ...m })) : [])
+    return mockChat[key] ?? (mockChat[key] = channel === 'team'
+      ? TEAM_CHAT_SEED.map((m, i) => ({ id: 's' + i, role: 'player' as Role, editedAt: null, canEdit: m.me, ...m }))
+      : [])
   }
   const sb = requireClient()
   // .limit — не тянем весь растущий чат целиком (последние 200 сообщений).
@@ -349,17 +396,7 @@ export async function listMessages(teamId: string, channel: ChatChannel = 'team'
     .eq('team_id', teamId).eq('channel', channel).order('created_at', { ascending: false }).limit(200)
   throwOn(error)
   const ctx = readMeContext()
-  return (data ?? []).reverse().map((m) => {
-    const role = ((m.sender_role as Role) ?? 'player')
-    return {
-      id: m.id as string,
-      author: m.author as string,
-      text: m.text as string,
-      time: hhmm(m.created_at as string),
-      role,
-      me: computeMe(ctx, m.author as string, role, (m.user_id as string) ?? null),
-    }
-  })
+  return (data ?? []).reverse().map((m) => toChatMsg(ctx, m as MessageRow))
 }
 
 export async function sendMessage(teamId: string, author: string, text: string, channel: ChatChannel = 'team'): Promise<void> {
@@ -368,19 +405,58 @@ export async function sendMessage(teamId: string, author: string, text: string, 
   const key = `${teamId}:${channel}`
   if (!isSupabaseConfigured) {
     const role: Role = getSession()?.role === 'admin' ? 'admin' : 'player'
-    const msg: ChatMsg = { id: 'm' + Math.random().toString(36).slice(2), author, text: t, time: 'только что', me: true, role }
+    const msg: ChatMsg = { id: 'm' + Math.random().toString(36).slice(2), author, text: t, time: 'только что', me: true, role, editedAt: null, canEdit: true }
     ;(mockChat[key] ??= []).push(msg)
-    ;(mockSubs[key] ?? []).forEach((cb) => cb(msg))
+    ;(mockSubs[key] ?? []).forEach((cb) => cb(msg, 'insert'))
     return
   }
   // author — только косметическая подпись игрока. Роль отправителя (тренер/игрок)
-  // проставляет СЕРВЕР триггером по auth-сессии, клиент не может выдать себя за тренера.
+  // и user_id проставляет СЕРВЕР триггером по auth-сессии: клиент не может ни
+  // выдать себя за тренера, ни присвоить сообщению чужое авторство (а значит и
+  // право правки).
   const { error } = await requireClient().from('messages').insert({ team_id: teamId, author, text: t, channel })
   throwOn(error)
 }
 
-/** Подписка на новые сообщения (командный чат или личный с тренером). Возвращает объект с .unsubscribe(). */
-export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void, channel: ChatChannel = 'team'): { unsubscribe(): void } {
+/** Изменить текст уже отправленного сообщения (как в мессенджерах).
+ *  Возвращает СЕРВЕРНОЕ время правки — оно же версия строки: вызывающий кладёт
+ *  его в editedAt, и тогда снимок истории, снятый до правки, уже не сможет
+ *  затереть новый текст (см. mergeMessages в ChatThread).
+ *
+ *  Правка идёт ТОЛЬКО через SECURITY DEFINER-функцию edit_message: у таблицы
+ *  messages нет UPDATE-политики RLS, поэтому прямой update из клиента отклоняется,
+ *  и подменить автора/роль/команду вместе с текстом невозможно — RPC меняет лишь
+ *  text и edited_at. Право правки проверяет она же (см. computeCanEdit). */
+export async function editMessage(teamId: string, channel: ChatChannel, messageId: string, text: string): Promise<string> {
+  const t = text.trim()
+  if (!t) throw new Error('empty_text') // пустой текст = удаление, а удаления у нас нет
+  if (!isSupabaseConfigured) {
+    const key = `${teamId}:${channel}`
+    const list = mockChat[key] ?? []
+    const i = list.findIndex((m) => m.id === messageId)
+    if (i === -1) throw new Error('message_not_found')
+    const editedAt = new Date().toISOString()
+    // Не мутируем строку на месте: её объект лежит в state React у ChatThread,
+    // и правка «внутри» не вызвала бы перерисовку. Кладём новый объект.
+    const next: ChatMsg = { ...list[i], text: t, editedAt }
+    list[i] = next
+    ;(mockSubs[key] ?? []).forEach((cb) => cb(next, 'update'))
+    return editedAt
+  }
+  const { data, error } = await requireClient().rpc('edit_message', { p_message_id: messageId, p_text: t })
+  throwOn(error)
+  // Фолбэк на локальное время нужен только если RPC почему-то вернула null:
+  // важен сам факт «версия новее прежней», а не микросекундная точность.
+  return (data as string | null) ?? new Date().toISOString()
+}
+
+/** 'insert' — сообщение из снимка/вставки: неизвестный id = новое сообщение.
+ *  'update' — правка уже существующего: неизвестный id значит лишь, что оно за
+ *  пределами загруженного окна истории, и приклеивать его в конец ленты нельзя. */
+export type MsgEventKind = 'insert' | 'update'
+
+/** Подписка на сообщения канала: новые и правки уже отправленных. Возвращает объект с .unsubscribe(). */
+export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg, kind: MsgEventKind) => void, channel: ChatChannel = 'team'): { unsubscribe(): void } {
   const key = `${teamId}:${channel}`
   if (!isSupabaseConfigured) {
     ;(mockSubs[key] ??= []).push(onMsg)
@@ -413,7 +489,7 @@ export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void, c
     pollBusy = true
     try {
       const msgs = await listMessages(teamId, channel)
-      if (!stopped && gen === pollGen) msgs.forEach(onMsg)
+      if (!stopped && gen === pollGen) msgs.forEach((m) => onMsg(m, 'insert'))
     } catch { /* сеть моргнула — попробуем в следующий тик */
     } finally { pollBusy = false }
   }
@@ -428,17 +504,26 @@ export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void, c
     if (pollTimer !== null) { window.clearInterval(pollTimer); pollTimer = null }
   }
 
+  // Правка доезжает и по сокету (событие UPDATE), и фоллбэк-опросом (тот и так
+  // тянет свежий текст всей истории), поэтому отдельного канала «событий
+  // редактирования» не нужно — нужен лишь признак, вставка это или правка.
+  function onRow(row: unknown, kind: MsgEventKind) {
+    const m = row as MessageRow
+    if (m.channel !== channel) return
+    onMsg(toChatMsg(readMeContext(), m), kind)
+  }
+
   const ch = sb
     .channel(topic)
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'messages', filter: `team_id=eq.${teamId}` },
-      (payload) => {
-        const m = payload.new as { id: string; author: string; text: string; created_at: string; channel: ChatChannel; sender_role?: Role; user_id?: string }
-        if (m.channel !== channel) return
-        const role = m.sender_role ?? 'player'
-        onMsg({ id: m.id, author: m.author, text: m.text, time: hhmm(m.created_at), role, me: computeMe(readMeContext(), m.author, role, m.user_id ?? null) })
-      },
+      (payload) => onRow(payload.new, 'insert'),
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'messages', filter: `team_id=eq.${teamId}` },
+      (payload) => onRow(payload.new, 'update'),
     )
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
@@ -449,7 +534,7 @@ export function subscribeMessages(teamId: string, onMsg: (m: ChatMsg) => void, c
         // историю, ни в подписку — закрываем окно финальным снапшотом (дедуп по id
         // в ChatThread безопасен). Раньше снапшот делался только if (wasPolling).
         listMessages(teamId, channel)
-          .then((msgs) => { if (!stopped) msgs.forEach(onMsg) })
+          .then((msgs) => { if (!stopped) msgs.forEach((m) => onMsg(m, 'insert')) })
           .catch(() => { /* не критично: история уже на экране, новое доставит сокет */ })
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') startPolling()
     })
@@ -688,6 +773,8 @@ function mapScoreRow(r: Record<string, unknown>): GradeRow {
     vok: (r.vok as number) ?? 0,
     superBonusVok: (r.super_bonus_vok as number) ?? 0,
     feedback: (r.feedback as string) ?? '',
+    feedbackFile: (r.feedback_file as string) ?? null,
+    feedbackFileName: (r.feedback_file_name as string) ?? null,
   }
 }
 
@@ -752,6 +839,27 @@ export async function submitAnswer(input: SubmitInput): Promise<{ fileUploaded: 
   return { fileUploaded: input.file ? fileUploaded : true }
 }
 
+/** Загрузка файла обратной связи ОТ ТРЕНЕРА в бакет 'answers', в подпапку команды
+ *  `<teamId>/<gameId>/feedback/<имя>`. Первый сегмент пути = teamId, поэтому команда
+ *  читает файл своей же read-политикой, а путь не пересекается с файлом-ответом команды
+ *  (тот лежит в `<teamId>/<gameId>/<имя>` без подпапки feedback).
+ *  Возвращает { path, name } при успехе или null — вызывающий (saveAll) при null не
+ *  затирает баллы и просит повторить, чтобы файл не потерялся молча. */
+export async function uploadFeedbackFile(teamId: string, gameId: string, file: File): Promise<{ path: string; name: string } | null> {
+  if (!isSupabaseConfigured) return { path: `mock/${teamId}/${gameId}/feedback/${file.name}`, name: file.name }
+  const sb = requireClient()
+  // Имя объекта транслитерируем в ASCII (Storage отклоняет кириллические ключи, 400),
+  // а исходное имя вернём отдельно — его покажем команде и подставим при скачивании.
+  const safeName = safeStorageName(file.name)
+  const path = `${teamId}/${gameId}/feedback/${safeName}`
+  const { error } = await sb.storage.from('answers').upload(path, file, {
+    upsert: true,
+    contentType: file.type || undefined,
+  })
+  if (error) return null
+  return { path, name: file.name }
+}
+
 /** Ссылка (подписанная, на 10 минут) для скачивания файла ответа из бакета 'answers'. */
 export async function getAnswerFileUrl(filePath: string): Promise<string | null> {
   if (!isSupabaseConfigured) return null
@@ -763,12 +871,13 @@ export async function getAnswerFileUrl(filePath: string): Promise<string | null>
   return data?.signedUrl ? toProxyUrl(data.signedUrl) : null
 }
 
-export interface GradeInput { teamId: string; gameId: string; cases: number; bonus: number; vok: number; superBonusVok: number; feedback: string }
+export interface GradeInput { teamId: string; gameId: string; cases: number; bonus: number; vok: number; superBonusVok: number; feedback: string; feedbackFile: string | null; feedbackFileName: string | null }
 
-/** Маппинг GradeInput → строка scores (общий для одиночного и пакетного сохранения).
- *  super_bonus (историческое «за лучший FCR») больше не начисляется — колонку в БД
- *  не пишем, она остаётся «дремлющей» (default 0) и на сумму рейтинга не влияет. */
-function gradeRow(i: GradeInput) {
+/** Базовая строка scores (баллы). super_bonus (историческое «за лучший FCR») больше
+ *  не начисляется — колонку в БД не пишем, она остаётся «дремлющей» (default 0). Файл
+ *  ОС сюда НЕ входит — он пишется отдельным шагом (см. gradeMany), чтобы отсутствие его
+ *  колонок не валило запись баллов. */
+function gradeCoreRow(i: GradeInput) {
   return {
     team_id: i.teamId, game_id: i.gameId,
     cases: i.cases, bonus: i.bonus,
@@ -776,12 +885,31 @@ function gradeRow(i: GradeInput) {
     feedback: i.feedback,
   }
 }
+/** Частичная строка scores только с файлом ОС (в т.ч. null при снятии). Все не-ключевые
+ *  колонки scores имеют default, поэтому такая строка валидна для апсерта; при конфликте
+ *  (строка уже создана шагом баллов) обновляются ровно эти два поля. */
+function gradeFileRow(i: GradeInput) {
+  return { team_id: i.teamId, game_id: i.gameId, feedback_file: i.feedbackFile, feedback_file_name: i.feedbackFileName }
+}
+/** Ошибка «нет такой колонки» (миграция файла ОС ещё не применена): PostgREST отдаёт
+ *  PGRST204, Postgres — 42703. Такую при записи файла ОС глотаем, прочие — пробрасываем. */
+function isMissingFeedbackColumn(e: unknown): boolean {
+  const err = e as { code?: string; message?: string } | null
+  return err?.code === 'PGRST204' || err?.code === '42703' || /feedback_file/i.test(err?.message ?? '')
+}
 
-/** Пакетное сохранение баллов всей игры одним запросом (вместо 30 отдельных upsert). */
+/** Пакетное сохранение баллов игры. ДВА шага, чтобы файловая фича не могла обрушить
+ *  оценивание при рассинхроне деплоя (клиент выкатили раньше миграции):
+ *    1) баллы — эти колонки есть всегда; при ошибке валимся (сохранять нечего);
+ *    2) путь к файлу ОС — best-effort: если колонок ещё нет, баллы УЖЕ сохранены,
+ *       тихо пропускаем, а не теряем оценки недели из-за не применённой миграции. */
 export async function gradeMany(inputs: GradeInput[]): Promise<void> {
   if (!isSupabaseConfigured || inputs.length === 0) return
-  const { error } = await requireClient().from('scores').upsert(inputs.map(gradeRow), { onConflict: 'team_id,game_id' })
+  const sb = requireClient()
+  const { error } = await sb.from('scores').upsert(inputs.map(gradeCoreRow), { onConflict: 'team_id,game_id' })
   throwOn(error)
+  const { error: fErr } = await sb.from('scores').upsert(inputs.map(gradeFileRow), { onConflict: 'team_id,game_id' })
+  if (fErr && !isMissingFeedbackColumn(fErr)) throwOn(fErr)
 }
 
 // =====================================================================
@@ -817,7 +945,7 @@ export async function getScoresForGame(gameId: string): Promise<Record<string, G
     const out: Record<string, GradeRow> = {}
     for (const t of TEAMS) {
       const s = t.perGame[gameId]
-      if (s) out[t.id] = { cases: s.cases, bonus: s.bonus, vok: s.vok ?? 0, superBonusVok: s.superBonusVok ?? 0, feedback: s.feedback ?? '' }
+      if (s) out[t.id] = { cases: s.cases, bonus: s.bonus, vok: s.vok ?? 0, superBonusVok: s.superBonusVok ?? 0, feedback: s.feedback ?? '', feedbackFile: s.feedbackFile ?? null, feedbackFileName: s.feedbackFileName ?? null }
     }
     return out
   }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pickCurrentGame, normalizeCode, computeMe } from './db'
+import { pickCurrentGame, normalizeCode, computeMe, computeCanEdit } from './db'
 import type { Game } from '../data/mock'
 
 describe('normalizeCode (устойчивость к мобильным клавиатурам)', () => {
@@ -65,5 +65,33 @@ describe('computeMe (моё/чужое сообщение)', () => {
   it('legacy без user_id → фолбэк по подписи (тёзки помечаются своими)', () => {
     expect(computeMe(player, 'Аня', 'player', null)).toBe(true)
     expect(computeMe(player, 'Боря', 'player', null)).toBe(false)
+  })
+})
+
+describe('computeCanEdit (право правки сообщения — то же правило, что в RPC edit_message)', () => {
+  const admin = { isAdmin: true, uid: 'a1', displayName: null }
+  const player = { isAdmin: false, uid: 'u1', displayName: 'Аня' }
+
+  it('игрок правит только своё — по user_id, а не по подписи', () => {
+    expect(computeCanEdit(player, 'player', 'u1')).toBe(true)
+    expect(computeCanEdit(player, 'player', 'u2')).toBe(false) // тёзка, другой uid
+  })
+  it('игрок не правит сообщения тренера', () => {
+    expect(computeCanEdit(player, 'admin', 'a1')).toBe(false)
+  })
+  it('тренер правит любую реплику тренера (учётка общая, устройства разные)', () => {
+    expect(computeCanEdit(admin, 'admin', 'a1')).toBe(true)
+    expect(computeCanEdit(admin, 'admin', 'a2')).toBe(true)
+  })
+  it('тренер не правит сообщения команд', () => {
+    expect(computeCanEdit(admin, 'player', 'u1')).toBe(false)
+  })
+  it('без user_id править нельзя никому (старые сообщения и непринятая миграция)', () => {
+    expect(computeCanEdit(player, 'player', null)).toBe(false)
+    expect(computeCanEdit(player, 'player', undefined)).toBe(false)
+    expect(computeCanEdit(admin, 'admin', null)).toBe(false)
+  })
+  it('без своей auth-сессии карандаш не показываем', () => {
+    expect(computeCanEdit({ isAdmin: false, uid: null, displayName: 'Аня' }, 'player', 'u1')).toBe(false)
   })
 })

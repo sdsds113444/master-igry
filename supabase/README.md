@@ -16,14 +16,25 @@
 8. `cases.sql`, `cases-ul.sql` — сиды кейсов.
 9. `migration_hardening_2.sql` — индексы под FK, лимит длины сообщения, `messages.user_id` (аддитивно, безопасно).
 10. `migration_answers_storage.sql` — приватный бакет `answers` для файлов ответов + RLS.
+11. `migration_case_images.sql`, `migration_cases_scale.sql` — картинки к кейсам, масштаб оценок.
+12. `migration_review_fixes.sql` — фиксы кода-ревью (раздел A применён; раздел B закомментирован осознанно).
+13. `migration_reactions.sql` — реакции на сообщения (`message_reactions`).
+14. `migration_prod_sync.sql` — досинхронизация репо с боем (лимит состава).
+15. `migration_message_edit.sql` — **редактирование сообщений в чате**: `messages.user_id`,
+    `messages.edited_at`, актуальная версия `messages_set_sender`, RPC `edit_message`.
+
+⚠️ `migration_message_edit.sql` применять **после** `migration_hardening.sql`: тот
+переопределяет `messages_set_sender()` в версии без `user_id`. Актуальная версия
+триггера — в `migration_message_edit.sql`.
 
 ## Актуальная («побеждающая») версия каждой функции
 
 - **`redeem_code`** → `migration_login_fixes.sql` (последняя по порядку; включает анти-брутфорс из `migration_hardening.sql` + регистронезависимость).
   Опциональное усиление (троттлинг по коду) — в `migration_hardening_optional.sql`.
 - **`get_rating`** → `migration_vok.sql` (суммирует оба супер-бонуса; идентична версии в `migration.sql`).
-- **`publish_game`** → `migration_board.sql`.
+- **`publish_game`** → применена ad-hoc версия из `migration_review_fixes.sql` (A1) + дедлайн из `games.deadline_at`.
 - **`is_admin` / `current_team_id`** → `migration.sql`.
+- **`messages_set_sender`** → `migration_message_edit.sql` (проставляет `user_id`; версия в `migration_hardening.sql` его не знает).
 
 ## Опционально (применять вручную, меняет логику входа/политики)
 

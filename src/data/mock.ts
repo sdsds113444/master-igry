@@ -29,6 +29,8 @@ export interface TeamScore {
   vok?: number // % VOC
   superBonusVok?: number // +3 за лучший VOC недели
   feedback?: string // текст обратной связи тренера
+  feedbackFile?: string | null // путь к файлу ОС от тренера в бакете 'answers' (или null)
+  feedbackFileName?: string | null // исходное имя файла для показа/скачивания
 }
 
 export interface Team {
@@ -162,6 +164,12 @@ export const TEAMS: Team[] = NAMES.map((name, i) => {
         : undefined
     perGame[g.id] = { cases, bonus, vok, superBonusVok, feedback }
     total += teamTotal({ cases, bonus, superBonusVok })
+  }
+  // Демо: у KOYA-04 (t4) на текущей игре есть файл ОС от тренера — чтобы в мок-режиме
+  // была видна кнопка «Файл от тренера» в кабинете команды.
+  const curG = GAMES.find((gg) => gg.status === 'current')
+  if (i === 3 && curG && perGame[curG.id]) {
+    perGame[curG.id] = { ...perGame[curG.id], feedbackFile: 'demo/t4/feedback/razbor.pdf', feedbackFileName: 'Разбор кейсов недели.pdf' }
   }
   return {
     id: `t${i + 1}`,

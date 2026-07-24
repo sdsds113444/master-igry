@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   Play, FileDown, Upload, Send, MessageCircle, CheckCircle2, Clock,
-  UserPlus, X, MessageSquare, Loader2, Pencil, ChevronDown, Crown, ExternalLink, ZoomIn, Check,
+  UserPlus, X, MessageSquare, Loader2, Pencil, ChevronDown, Crown, ExternalLink, ZoomIn, Check, Download,
 } from 'lucide-react'
 import {
   GAME_VIDEO, GAME_FILE,
@@ -12,7 +12,7 @@ import {
 import {
   resolveMyTeam, signOut, listTeamsRating, getRoster, addPlayer as dbAddPlayer, removePlayer as dbRemovePlayer,
   renamePlayer as dbRenamePlayer,
-  getCases, getScores, getSubmission, submitAnswer, getGames, pickCurrentGame,
+  getCases, getScores, getSubmission, submitAnswer, getGames, pickCurrentGame, getAnswerFileUrl,
   getMentorLatestFromTrainer, getMentorSeen, markMentorSeen, setCaptain as dbSetCaptain,
   type TeamInfo, type RosterMember,
 } from '../lib/db'
@@ -43,6 +43,52 @@ function hasMeaningfulText(s: string): boolean {
  *  ложное «Ответ отправлен» на пустой заготовке, хотя команде сдавать ещё нечего. */
 function isRealSubmission(answer: string, fileName: string | null): boolean {
   return hasMeaningfulText(answer) || !!fileName
+}
+
+/** Кнопка скачивания файла обратной связи от тренера (разбор кейсов). Тянет файл по
+ *  подписанной ссылке и отдаёт как локальный blob — тем же способом, что тренер в
+ *  админке: window.open после await теряет «жест пользователя» и режется блокировщиком. */
+function FeedbackFileDownload({ filePath, fileName }: { filePath: string; fileName: string | null }) {
+  const [downloading, setDownloading] = useState(false)
+  const [error, setError] = useState('')
+  const name = fileName ?? basename(filePath)
+  async function download() {
+    if (downloading) return
+    setDownloading(true)
+    setError('')
+    try {
+      const url = await getAnswerFileUrl(filePath)
+      if (!url) { setError('Не удалось получить ссылку на файл. Попробуйте ещё раз.'); return }
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`http ${res.status}`)
+      const blob = await res.blob()
+      const objUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = objUrl
+      a.download = name
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.setTimeout(() => URL.revokeObjectURL(objUrl), 10000)
+    } catch {
+      setError('Не удалось скачать файл. Проверьте соединение и попробуйте ещё раз.')
+    } finally {
+      setDownloading(false)
+    }
+  }
+  return (
+    <div className="mt-2">
+      <button
+        onClick={download}
+        disabled={downloading}
+        className="flex max-w-full items-center gap-2 rounded-xl bg-alfa/10 px-3 py-2 text-xs font-bold text-alfa-ink transition-colors hover:bg-alfa/20 disabled:opacity-60"
+      >
+        {downloading ? <Loader2 size={14} className="shrink-0 animate-spin" /> : <Download size={14} className="shrink-0" />}
+        <span className="truncate">Файл от тренера: {name}</span>
+      </button>
+      {error && <p className="mt-1 text-xs font-semibold text-danger" role="alert">{error}</p>}
+    </div>
+  )
 }
 
 export default function TeamCabinet() {
@@ -911,6 +957,9 @@ export default function TeamCabinet() {
                           <b className="text-ink">Комментарий тренера:</b> {s.feedback}
                         </div>
                       </div>
+                    )}
+                    {s.feedbackFile && (
+                      <FeedbackFileDownload filePath={s.feedbackFile} fileName={s.feedbackFileName ?? null} />
                     )}
                   </div>
                 )

@@ -26,20 +26,25 @@ describe('gradeTotal', () => {
 })
 
 describe('scoreWrite (строка оценивания → запись в scores)', () => {
-  it('не сдала → всё обнуляется, включая vok и feedback', () => {
-    expect(scoreWrite({ submitted: false, cases: 3, bonus: true, vok: 88, superBonusVok: true, feedback: 'ок' }))
-      .toEqual({ cases: 0, bonus: 0, vok: 0, superBonusVok: 0, feedback: '' })
+  const F = { feedbackFile: null, feedbackFileName: null }
+  it('не сдала → всё обнуляется, включая vok, feedback и файл ОС', () => {
+    expect(scoreWrite({ submitted: false, cases: 3, bonus: true, vok: 88, superBonusVok: true, feedback: 'ок', feedbackFile: 'p/f.pdf', feedbackFileName: 'f.pdf' }))
+      .toEqual({ cases: 0, bonus: 0, vok: 0, superBonusVok: 0, feedback: '', feedbackFile: null, feedbackFileName: null })
   })
   it('сдала → галочки в веса, cases/vok/feedback как есть', () => {
-    expect(scoreWrite({ submitted: true, cases: 2, bonus: true, vok: 75, superBonusVok: false, feedback: 'хорошо' }))
-      .toEqual({ cases: 2, bonus: BONUS_POINTS, vok: 75, superBonusVok: 0, feedback: 'хорошо' })
+    expect(scoreWrite({ submitted: true, cases: 2, bonus: true, vok: 75, superBonusVok: false, feedback: 'хорошо', ...F }))
+      .toEqual({ cases: 2, bonus: BONUS_POINTS, vok: 75, superBonusVok: 0, feedback: 'хорошо', feedbackFile: null, feedbackFileName: null })
+  })
+  it('сдала → файл ОС сохраняется как есть (путь и имя)', () => {
+    expect(scoreWrite({ submitted: true, cases: 1, bonus: false, vok: 60, superBonusVok: false, feedback: '', feedbackFile: 't/g/feedback/razbor.pdf', feedbackFileName: 'Разбор.pdf' }))
+      .toEqual({ cases: 1, bonus: 0, vok: 60, superBonusVok: 0, feedback: '', feedbackFile: 't/g/feedback/razbor.pdf', feedbackFileName: 'Разбор.pdf' })
   })
   it('обе галочки при cases=3', () => {
-    expect(scoreWrite({ submitted: true, cases: 3, bonus: true, vok: 90, superBonusVok: true, feedback: '' }))
-      .toEqual({ cases: 3, bonus: BONUS_POINTS, vok: 90, superBonusVok: SUPER_BONUS_VOK_POINTS, feedback: '' })
+    expect(scoreWrite({ submitted: true, cases: 3, bonus: true, vok: 90, superBonusVok: true, feedback: '', ...F }))
+      .toEqual({ cases: 3, bonus: BONUS_POINTS, vok: 90, superBonusVok: SUPER_BONUS_VOK_POINTS, feedback: '', feedbackFile: null, feedbackFileName: null })
   })
   it('сумма записи согласована с gradeTotal', () => {
-    const g = { submitted: true, cases: 2, bonus: true, vok: 50, superBonusVok: true, feedback: '' }
+    const g = { submitted: true, cases: 2, bonus: true, vok: 50, superBonusVok: true, feedback: '', ...F }
     const w = scoreWrite(g)
     expect(w.cases + w.bonus + w.superBonusVok).toBe(gradeTotal(g))
   })

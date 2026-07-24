@@ -1,10 +1,10 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Megaphone, RefreshCw, Check, Trophy, Loader2, MessageCircle, Bug, HelpCircle, Lightbulb, Eye, CheckCheck, FileText, Download, Users, Crown } from 'lucide-react'
+import { Megaphone, RefreshCw, Check, Trophy, Loader2, MessageCircle, Bug, HelpCircle, Lightbulb, Eye, CheckCheck, FileText, Download, Users, Crown, Paperclip, X } from 'lucide-react'
 import { type Game } from '../data/mock'
 import {
   listAllTeamsAdmin, getScoresForGame, gradeMany, getGames, publishGame, pickCurrentGame,
-  getAnswersForGame, getAnswerFileUrl, listMentorLatestFromTeams, getMentorSeen, markMentorSeen,
+  getAnswersForGame, getAnswerFileUrl, uploadFeedbackFile, listMentorLatestFromTeams, getMentorSeen, markMentorSeen,
   getRoster, listFeedback, setFeedbackStatus, type AdminTeamRow, type FeedbackRow, type RosterMember,
 } from '../lib/db'
 
@@ -24,6 +24,12 @@ function clampNum(raw: string, max: number): number {
 interface Grade {
   submitted: boolean
   cases: number
+  // feedbackFile/Name — уже сохранённый файл ОС (путь в бакете + исходное имя).
+  // pendingFile — только что выбранный тренером файл, ещё не загруженный: заливается
+  // в saveAll и заменяет feedbackFile. Не в БД — живёт только в состоянии оценивания.
+  feedbackFile?: string | null
+  feedbackFileName?: string | null
+  pendingFile?: File | null
   bonus: boolean
   vok: number
   superBonusVok: boolean
@@ -102,10 +108,10 @@ export default function Admin() {
           // «Сдала» определяется наличием ответа в таблице answers, а не величиной баллов —
           // иначе команда, сдавшая ответ и получившая 0, после перезагрузки выглядела бы «не сдала».
           const submitted = !!ans[t.id]
-            || (s ? (s.cases > 0 || s.bonus > 0 || s.superBonusVok > 0 || s.vok > 0 || !!s.feedback) : false)
+            || (s ? (s.cases > 0 || s.bonus > 0 || s.superBonusVok > 0 || s.vok > 0 || !!s.feedback || !!s.feedbackFile) : false)
           init[t.id] = s
-            ? { submitted, cases: s.cases, bonus: s.bonus > 0, vok: s.vok, superBonusVok: s.superBonusVok > 0, feedback: s.feedback }
-            : { submitted, cases: 0, bonus: false, vok: 0, superBonusVok: false, feedback: '' }
+            ? { submitted, cases: s.cases, bonus: s.bonus > 0, vok: s.vok, superBonusVok: s.superBonusVok > 0, feedback: s.feedback, feedbackFile: s.feedbackFile, feedbackFileName: s.feedbackFileName, pendingFile: null }
+            : { submitted, cases: 0, bonus: false, vok: 0, superBonusVok: false, feedback: '', feedbackFile: null, feedbackFileName: null, pendingFile: null }
         }
         setGrades(init)
         setAnswers(ans)
@@ -228,9 +234,50 @@ export default function Admin() {
       // своего устаревшего снимка (тихий lost-update). Маппинг «строка оценивания → очки»
       // вынесен в scoreWrite (scoring.ts) и покрыт тестами.
       const changed = teams.filter((t) => dirtyTeams.has(t.id))
-      if (changed.length > 0) {
-        await gradeMany(changed.map((t) => ({ teamId: t.id, gameId, ...scoreWrite(grades[t.id]) })))
+
+      // Сперва заливаем новые файлы ОС (по одному). Если хоть один не загрузился —
+      // ПРЕРЫВАЕМ всё сохранение и просим повторить: иначе баллы сохранились бы без
+      // обещанного разбора, а файл потерялся бы молча. Команды без нового файла берут
+      // ранее сохранённый путь (round-trip через grade state, апсерт его не теряет).
+      const resolved: Record<string, { feedbackFile: string | null; feedbackFileName: string | null }> = {}
+      for (const t of changed) {
+        const g = grades[t.id]
+        if (g.submitted && g.pendingFile) {
+          const up = await uploadFeedbackFile(t.id, gameId, g.pendingFile)
+          if (!up) {
+            setSaveError(`Не удалось загрузить файл обратной связи для команды «${t.name}». Ничего не сохранено — попробуйте ещё раз.`)
+            return
+          }
+          resolved[t.id] = { feedbackFile: up.path, feedbackFileName: up.name }
+        } else {
+          resolved[t.id] = { feedbackFile: g.feedbackFile ?? null, feedbackFileName: g.feedbackFileName ?? null }
+        }
       }
+
+      const toWrite = (t: AdminTeamRow) => {
+        const g = grades[t.id]
+        return scoreWrite({
+          submitted: g.submitted, cases: g.cases, bonus: g.bonus, vok: g.vok,
+          superBonusVok: g.superBonusVok, feedback: g.feedback, ...resolved[t.id],
+        })
+      }
+
+      if (changed.length > 0) {
+        await gradeMany(changed.map((t) => ({ teamId: t.id, gameId, ...toWrite(t) })))
+      }
+
+      // Залитый файл теперь «сохранённый»: снимаем pendingFile и подставляем итоговый путь
+      // (scoreWrite мог обнулить его, если команду сняли со «сдала») — иначе повторное
+      // сохранение перезалило бы тот же файл, а UI показывал бы «есть несохранённый».
+      setGrades((prev) => {
+        const next = { ...prev }
+        for (const t of changed) {
+          const w = toWrite(t)
+          next[t.id] = { ...prev[t.id], feedbackFile: w.feedbackFile, feedbackFileName: w.feedbackFileName, pendingFile: null }
+        }
+        return next
+      })
+
       setSaved(true)
       // Сохранённые команды теперь проверены — гасим у них красную точку «на проверку».
       setReviewedTeams((prev) => { const n = new Set(prev); changed.forEach((t) => n.add(t.id)); return n })
@@ -364,6 +411,7 @@ export default function Admin() {
                     hasAnswer={!!answers[t.id]}
                     needsReview={pendingReview.has(t.id)}
                     unread={mentorUnread.has(t.id)}
+                    saving={saving}
                     onUpd={upd}
                     onChat={openTeamChat}
                     onView={setViewTeam}
@@ -385,6 +433,7 @@ export default function Admin() {
                 hasAnswer={!!answers[t.id]}
                 needsReview={pendingReview.has(t.id)}
                 unread={mentorUnread.has(t.id)}
+                saving={saving}
                 onUpd={upd}
                 onChat={openTeamChat}
                 onView={setViewTeam}
@@ -654,17 +703,85 @@ function FeedbackPanel() {
   )
 }
 
+/** Потолок размера файла ОС от тренера — тот же, что у файла-ответа команды: запасной
+ *  канал /sb (прокси Vercel) обрывает запросы длиннее 120 с, тяжёлый файл не успеет. */
+const FEEDBACK_FILE_MAX = 15 * 1024 * 1024
+
+/** Прикрепление файла обратной связи тренером (разбор кейсов) — рядом с комментарием.
+ *  Показывает имя выбранного/сохранённого файла, позволяет заменить и убрать. Сам файл
+ *  заливается не тут, а в saveAll: тут только выбор (pendingFile) — чтобы загрузка шла
+ *  по кнопке «Сохранить», а не на каждый клик, и попадала в общий поток ошибок.
+ *  busy=true (идёт сохранение) блокирует правки: иначе файл, выбранный во время
+ *  сохранения, был бы затёрт финальным setGrades. */
+function FeedbackFileControl({ g, onChange, busy }: { g: Grade; onChange: (patch: Partial<Grade>) => void; busy: boolean }) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [sizeError, setSizeError] = useState('')
+  const isPending = !!g.pendingFile
+  const name = g.pendingFile?.name ?? g.feedbackFileName ?? null
+  const disabled = !g.submitted || busy
+  function pick(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    e.target.value = '' // сброс: позволяет выбрать тот же файл повторно (после «убрать»)
+    if (!f) return
+    if (f.size > FEEDBACK_FILE_MAX) { setSizeError('Файл больше 15 МБ — сожмите его и прикрепите снова.'); return }
+    setSizeError('')
+    onChange({ pendingFile: f })
+  }
+  return (
+    <div className="mt-1">
+      <input ref={inputRef} type="file" className="hidden" aria-hidden="true" tabIndex={-1} onChange={pick} />
+      {name ? (
+        <div className="flex items-center gap-1 text-[11px]">
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={disabled}
+            title={isPending ? 'Файл выбран, сохранится по кнопке «Сохранить». Нажмите, чтобы заменить.' : 'Заменить файл'}
+            className="flex min-w-0 items-center gap-1 text-ink-soft transition-colors hover:text-alfa disabled:opacity-40"
+          >
+            <Paperclip size={11} className={isPending ? 'shrink-0 text-alfa' : 'shrink-0'} />
+            <span className="max-w-[130px] truncate font-semibold">{name}</span>
+          </button>
+          {isPending && <span className="shrink-0 font-bold text-alfa" title="Не сохранён" aria-hidden="true">•</span>}
+          {isPending && <span className="sr-only">— не сохранён</span>}
+          <button
+            type="button"
+            onClick={() => { setSizeError(''); onChange(isPending ? { pendingFile: null } : { feedbackFile: null, feedbackFileName: null }) }}
+            disabled={busy}
+            aria-label="Убрать файл"
+            title="Убрать файл"
+            className="shrink-0 text-ink-soft transition-colors hover:text-alfa disabled:opacity-40"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={disabled}
+          className="flex items-center gap-1 text-[11px] font-semibold text-ink-soft transition-colors hover:text-alfa disabled:opacity-40"
+        >
+          <Paperclip size={11} /> Прикрепить файл
+        </button>
+      )}
+      {sizeError && <p className="mt-0.5 text-[11px] font-semibold text-danger" role="alert">{sizeError}</p>}
+    </div>
+  )
+}
+
 /** Строка таблицы оценивания (desktop), мемоизированная: перерисовывается только та
  *  команда, чей grade изменился, а не все ~30 строк на каждый ввод символа. Опирается
  *  на СТАБИЛЬНЫЕ пропсы onUpd/onChat/onView (см. useCallback/setState в Admin). */
 const GradeRowDesktop = memo(function GradeRowDesktop({
-  t, g, hasAnswer, needsReview, unread, onUpd, onChat, onView, onRoster,
+  t, g, hasAnswer, needsReview, unread, saving, onUpd, onChat, onView, onRoster,
 }: {
   t: AdminTeamRow
   g: Grade
   hasAnswer: boolean
   needsReview: boolean
   unread: boolean
+  saving: boolean
   onUpd: (id: string, patch: Partial<Grade>) => void
   onChat: (t: AdminTeamRow) => void
   onView: (t: AdminTeamRow) => void
@@ -757,6 +874,7 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
           placeholder="комментарий команде…"
           className="w-52 rounded-lg border border-black/10 sf-3 px-2 py-1 text-xs outline-none focus:border-alfa/50 disabled:opacity-40"
         />
+        <FeedbackFileControl g={g} onChange={onChange} busy={saving} />
       </td>
       <td className="px-4 text-right text-base font-bold">{sum}</td>
     </tr>
@@ -765,13 +883,14 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
 
 /** Карточка оценивания одной команды для мобильной раскладки (замена строки таблицы). */
 const GradeCard = memo(function GradeCard({
-  t, g, hasAnswer, needsReview, unread, onUpd, onChat, onView, onRoster,
+  t, g, hasAnswer, needsReview, unread, saving, onUpd, onChat, onView, onRoster,
 }: {
   t: AdminTeamRow
   g: Grade
   hasAnswer: boolean
   needsReview: boolean
   unread: boolean
+  saving: boolean
   onUpd: (id: string, patch: Partial<Grade>) => void
   onChat: (t: AdminTeamRow) => void
   onView: (t: AdminTeamRow) => void
@@ -875,16 +994,21 @@ const GradeCard = memo(function GradeCard({
         </label>
       </div>
 
-      <label className="mt-2 block">
-        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">ОС тренера</span>
-        <input
-          value={g.feedback}
-          disabled={!g.submitted}
-          onChange={(e) => onChange({ feedback: e.target.value })}
-          placeholder="комментарий команде…"
-          className="w-full rounded-lg border border-black/10 sf-3 px-3 py-2 text-sm outline-none focus:border-alfa/50 disabled:opacity-40"
-        />
-      </label>
+      <div className="mt-2">
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">ОС тренера</span>
+          <input
+            value={g.feedback}
+            disabled={!g.submitted}
+            onChange={(e) => onChange({ feedback: e.target.value })}
+            placeholder="комментарий команде…"
+            className="w-full rounded-lg border border-black/10 sf-3 px-3 py-2 text-sm outline-none focus:border-alfa/50 disabled:opacity-40"
+          />
+        </label>
+        {/* Вне <label>: у файл-контрола свои кнопки и input — вложение интерактива в
+            label невалидно и портит доступное имя поля комментария. */}
+        <FeedbackFileControl g={g} onChange={onChange} busy={saving} />
+      </div>
     </div>
   )
 })
