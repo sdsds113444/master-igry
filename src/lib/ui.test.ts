@@ -1,5 +1,27 @@
 import { describe, it, expect } from 'vitest'
-import { rankTier, rankPercent, diffBadge, teamAvatar, safeStorageName, humanTimeLeft } from './ui'
+import { rankTier, rankPercent, diffBadge, teamAvatar, safeStorageName, humanTimeLeft, downloadName } from './ui'
+
+describe('downloadName (чей это файл в «Загрузках» тренера)', () => {
+  it('подставляет имя команды перед именем файла', () => {
+    expect(downloadName('Камыши', 'cases-noforward.xlsx')).toBe('Камыши — cases-noforward.xlsx')
+  })
+  it('файлы разных команд больше не совпадают', () => {
+    const a = downloadName('Коржики', 'cases-noforward.xlsx')
+    const b = downloadName('Союз', 'cases-noforward.xlsx')
+    expect(a).not.toBe(b)
+  })
+  it('запрещённые в именах файлов символы заменяются', () => {
+    expect(downloadName('А/Б: "В"', 'x.xlsx')).toBe('А_Б_ _В_ — x.xlsx')
+  })
+  it('без имени команды возвращает исходное имя', () => {
+    expect(downloadName(null, 'x.xlsx')).toBe('x.xlsx')
+    expect(downloadName('   ', 'x.xlsx')).toBe('x.xlsx')
+  })
+  it('без имени файла — понятный фолбэк, а не пустая строка', () => {
+    expect(downloadName('Камыши', null)).toBe('Камыши — answer')
+    expect(downloadName(null, null)).toBe('answer')
+  })
+})
 
 describe('humanTimeLeft (отсчёт до дедлайна)', () => {
   const m = 60 * 1000, h = 60 * m, d = 24 * h

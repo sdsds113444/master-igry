@@ -14,6 +14,7 @@ import {
   renamePlayer as dbRenamePlayer,
   getCases, getScores, getSubmission, submitAnswer, getGames, pickCurrentGame, getAnswerFileUrl,
   getMentorLatestFromTrainer, getMentorSeen, markMentorSeen, setCaptain as dbSetCaptain,
+  SubmissionClosedError,
   type TeamInfo, type RosterMember,
 } from '../lib/db'
 
@@ -374,13 +375,26 @@ export default function TeamCabinet() {
     }
   }
 
+  // Приём ответов закрыт после дедлайна: это ТОЧНО ТА ЖЕ проверка, что в RLS
+  // (answers_write пускает запись, пока now() <= deadline_at). Без неё форма оставалась
+  // рабочей, отказ сервера показывался как «проверьте соединение», и команда решала,
+  // что сломался сайт. Тикаем раз в 30 с, чтобы форма закрылась и без перезагрузки.
+  const [nowTs, setNowTs] = useState(() => Date.now())
+  const deadlineMs = current?.deadline_at ? new Date(current.deadline_at).getTime() : null
+  useEffect(() => {
+    if (deadlineMs === null || Number.isNaN(deadlineMs)) return
+    const t = window.setInterval(() => setNowTs(Date.now()), 30000)
+    return () => window.clearInterval(t)
+  }, [deadlineMs])
+  const submissionClosed = deadlineMs !== null && !Number.isNaN(deadlineMs) && nowTs > deadlineMs
+
   // Есть что сдавать: ОСМЫСЛЕННЫЙ текст (буква/цифра, а не одни знаки препинания),
   // новый файл или ранее прикреплённый файл. Иначе случайная запятая проходила как
   // «сдача» и создавала мусорную строку в answers, а админка считала её «сдано».
   const canSubmit = hasMeaningfulText(answer) || !!file || !!fileAttached
 
   async function sendAnswer() {
-    if (!me || !current || sending || !canSubmit) return // guard от двойной/пустой отправки
+    if (!me || !current || sending || !canSubmit || submissionClosed) return // guard от двойной/пустой/просроченной отправки
     setSendError('')
     setSending(true)
     try {
@@ -403,8 +417,16 @@ export default function TeamCabinet() {
       }
       setFile(null)
       setSent(true) // полный успех: текст (и файл, если был) сохранены
-    } catch {
-      setSendError('Ответ не отправился. Проверьте соединение и попробуйте ещё раз.')
+    } catch (e) {
+      // Сервер закрыл приём (дедлайн прошёл / игра больше не текущая) — это НЕ сеть.
+      // Раньше такой отказ выглядел как «проверьте соединение», и команда искала
+      // проблему у себя: пробовала телефон, домашний ПК, писала «сайт сломан».
+      if (e instanceof SubmissionClosedError) {
+        setSendError('Приём ответов по этому заданию закрыт — дедлайн прошёл. Напишите тренеру в чат.')
+        setNowTs(Date.now()) // подтягиваем UI к серверу: форма закроется сразу
+      } else {
+        setSendError('Ответ не отправился. Проверьте соединение и попробуйте ещё раз.')
+      }
     } finally {
       setSending(false)
     }
@@ -668,7 +690,32 @@ export default function TeamCabinet() {
           <div className="glass-strong rounded-glass p-5">
             <h3 className="font-display text-lg font-bold">Ответ команды</h3>
             <p className="text-sm text-ink-soft">Обсудите в чате и оформите общий ответ. Отправляет капитан.</p>
-            {sent ? (
+            {submissionClosed ? (
+              /* Дедлайн прошёл: сервер (RLS) ответ уже не примет. Показываем это честно,
+                 а не даём рабочую форму, которая упадёт с «проверьте соединение». */
+              <div className="mt-4 space-y-2">
+                <div className="flex items-start gap-2.5 rounded-2xl sf-2 p-4 text-sm font-semibold text-ink-soft" role="status">
+                  <Clock size={18} className="mt-0.5 shrink-0" />
+                  <span>
+                    <b className="text-ink">Приём ответов по этому заданию закрыт.</b> Дедлайн прошёл
+                    {current?.deadline_at ? ` (${new Date(current.deadline_at).toLocaleString('ru', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} МСК)` : ''}.
+                    {sent || fileAttached || hasMeaningfulText(answer)
+                      ? ' Ваш ответ сохранён — тренер его увидит.'
+                      : ' Если не успели — напишите тренеру в чат.'}
+                  </span>
+                </div>
+                {(hasMeaningfulText(answer) || fileAttached) && (
+                  <div className="rounded-2xl sf-1 p-4">
+                    {hasMeaningfulText(answer) && <p className="whitespace-pre-wrap text-sm">{answer}</p>}
+                    {fileAttached && (
+                      <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-ink-soft">
+                        <Upload size={13} className="shrink-0" /> <span className="truncate">{fileAttached}</span>
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : sent ? (
               <>
                 <div
                   className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl bg-success/10 p-4 text-success"

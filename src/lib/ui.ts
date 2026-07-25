@@ -29,6 +29,19 @@ export function basename(path: string, fallback = 'файл'): string {
   return path.split('/').pop() || fallback
 }
 
+/** Имя файла для скачивания тренером: «<Команда> — <исходное имя>».
+ *
+ *  Путь в бакете (teamId/gameId/имя) при скачивании отбрасывается, а команды присылают
+ *  ОДИН И ТОТ ЖЕ шаблон кейсов — без имени команды в «Загрузках» копится
+ *  cases-noforward.xlsx, (1), (2)… и не понять, чей файл. Кириллицу оставляем: это имя
+ *  для файловой системы пользователя, а не ключ Storage (там нужен safeStorageName).
+ *  Чистим только символы, запрещённые в именах файлов Windows/macOS. */
+export function downloadName(teamName: string | null | undefined, fileName: string | null | undefined): string {
+  const file = (fileName ?? '').trim() || 'answer'
+  const team = (teamName ?? '').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim()
+  return team ? `${team} — ${file}` : file
+}
+
 const CYR: Record<string, string> = {
   а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i',
   й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't',

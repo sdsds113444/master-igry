@@ -24,6 +24,24 @@ export function teamTotal(s: ScoreParts): number {
   return s.cases + s.bonus + s.superBonusVok
 }
 
+/** Места в рейтинге по «спортивной» схеме: РАВНЫЕ суммы делят одно место, следующее
+ *  идёт со сдвигом (7,5,5,3 → места 1,2,2,4).
+ *
+ *  Раньше место было просто индексом в отсортированном списке, то есть при одинаковых
+ *  баллах порядок задавал алфавит: одна команда получала медаль и «Топ-3 сезона»,
+ *  соседняя с тем же результатом — место ниже и ничего. Объяснить это участникам нечем.
+ *
+ *  Вход должен быть уже отсортирован по убыванию суммы (как отдаёт get_rating). */
+export function assignRanks(totalsDesc: number[]): number[] {
+  const ranks: number[] = []
+  let rank = 0
+  for (let i = 0; i < totalsDesc.length; i++) {
+    if (i === 0 || totalsDesc[i] !== totalsDesc[i - 1]) rank = i + 1
+    ranks.push(rank)
+  }
+  return ranks
+}
+
 /** Состояние строки оценивания в админке (чекбоксы + число за кейсы). */
 export interface GradeParts {
   submitted: boolean

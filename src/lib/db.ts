@@ -7,6 +7,7 @@
 
 import { isSupabaseConfigured, supabase, requireClient, toProxyUrl } from './supabase'
 import { basename, safeStorageName } from './ui'
+import { assignRanks } from './scoring'
 import {
   TEAMS, GAMES, FEED, ROSTER_SEED, TEAM_CHAT_SEED,
   type TeamScore, type CaseItem, type Game, type FeedItem,
@@ -805,10 +806,29 @@ export async function getSubmission(teamId: string, gameId: string): Promise<{ a
   return { answer: (data.text as string) ?? '', fileName: filePath ? basename(filePath) : null, filePath }
 }
 
+/** Приём ответов по этому заданию закрыт (дедлайн прошёл или игра больше не текущая).
+ *  Отличаем от сетевого сбоя, чтобы не советовать «проверьте соединение» человеку,
+ *  у которого с соединением всё в порядке. */
+export class SubmissionClosedError extends Error {
+  constructor() { super('submission_closed') }
+}
+
+/** Отказ RLS (answers_write пускает запись, только пока игра current и не прошёл дедлайн).
+ *  PostgREST отдаёт код 42501 либо текст про row-level security. */
+function isRlsDenied(e: unknown): boolean {
+  const err = e as { code?: string; message?: string } | null
+  return err?.code === '42501' || /row-level security|violates row-level/i.test(err?.message ?? '')
+}
+
 export interface SubmitInput { teamId: string; gameId: string; answer: string; file?: File | null }
 /** Возвращает fileUploaded: удалось ли прикрепить файл (false — если файл выбран,
  *  но загрузка не прошла, напр. бакет 'answers' ещё не создан миграцией).
- *  Текст ответа сохраняется ВСЕГДА — загрузка файла не блокирует сдачу ответа. */
+ *  Текст ответа сохраняется ВСЕГДА — загрузка файла не блокирует сдачу ответа.
+ *
+ *  ПОРЯДОК ВАЖЕН: сперва пишем текст, и только потом грузим файл. Storage-политики
+ *  дедлайна не знают (его проверяет только RLS таблицы answers), поэтому при обратном
+ *  порядке после дедлайна файл физически улетал в бакет, запись отклонялась, а команда
+ *  видела «проверьте соединение» — байты в хранилище есть, ответа у тренера нет. */
 export async function submitAnswer(input: SubmitInput): Promise<{ fileUploaded: boolean }> {
   if (!isSupabaseConfigured) {
     const prev = mockSubmissions[`${input.teamId}:${input.gameId}`]
@@ -816,27 +836,28 @@ export async function submitAnswer(input: SubmitInput): Promise<{ fileUploaded: 
     return { fileUploaded: !!input.file }
   }
   const sb = requireClient()
-  // Реально загружаем файл в приватный бакет 'answers' (путь team/game/имя).
-  // Раньше сохранялось ТОЛЬКО имя файла — байты никуда не уходили, тренер их не получал.
-  // best-effort: если загрузка не прошла — текст ответа всё равно сохраняем, а наверх
-  // отдаём fileUploaded=false для честного уведомления (не молчим и не теряем текст).
-  let filePath: string | undefined // undefined → не трогаем уже сохранённый файл
-  let fileUploaded = false
-  if (input.file) {
-    // Транслитерируем имя в ASCII: Supabase Storage отклоняет кириллические ключи (400).
-    const safeName = safeStorageName(input.file.name)
-    const path = `${input.teamId}/${input.gameId}/${safeName}`
-    const { error: upErr } = await sb.storage.from('answers').upload(path, input.file, {
-      upsert: true,
-      contentType: input.file.type || undefined,
-    })
-    if (!upErr) { filePath = path; fileUploaded = true }
-  }
-  const row: Record<string, unknown> = { team_id: input.teamId, game_id: input.gameId, text: input.answer }
-  if (filePath !== undefined) row.file_url = filePath
-  const { error } = await sb.from('answers').upsert(row, { onConflict: 'team_id,game_id' })
-  throwOn(error)
-  return { fileUploaded: input.file ? fileUploaded : true }
+
+  // 1) Текст. Заодно это проверка «приём ещё открыт»: RLS откажет, если дедлайн прошёл
+  //    или игра уже не current — тогда файл даже не начнёт загружаться.
+  const { error } = await sb.from('answers')
+    .upsert({ team_id: input.teamId, game_id: input.gameId, text: input.answer }, { onConflict: 'team_id,game_id' })
+  if (error) throw isRlsDenied(error) ? new SubmissionClosedError() : error
+
+  // 2) Файл — best-effort: строка ответа уже сохранена, и сбой загрузки её не отменяет.
+  //    Наверх отдаём fileUploaded=false для честного уведомления (не молчим).
+  if (!input.file) return { fileUploaded: true }
+  // Транслитерируем имя в ASCII: Supabase Storage отклоняет кириллические ключи (400).
+  const path = `${input.teamId}/${input.gameId}/${safeStorageName(input.file.name)}`
+  const { error: upErr } = await sb.storage.from('answers').upload(path, input.file, {
+    upsert: true,
+    contentType: input.file.type || undefined,
+  })
+  if (upErr) return { fileUploaded: false }
+
+  const { error: linkErr } = await sb.from('answers')
+    .upsert({ team_id: input.teamId, game_id: input.gameId, file_url: path }, { onConflict: 'team_id,game_id' })
+  // Файл в бакете, но ссылку записать не вышло — тренер его не увидит, честно говорим «нет».
+  return { fileUploaded: !linkErr }
 }
 
 /** Загрузка файла обратной связи ОТ ТРЕНЕРА в бакет 'answers', в подпапку команды
@@ -917,13 +938,19 @@ export async function gradeMany(inputs: GradeInput[]): Promise<void> {
 // =====================================================================
 export async function listTeamsRating(): Promise<RatingRow[]> {
   if (!isSupabaseConfigured) {
-    return TEAMS.map((t) => ({ id: t.id, rank: t.rank ?? 0, name: t.name, site: t.site, hue: t.hue, total: t.total }))
+    // Места считаем той же функцией, что и на живой базе, — демо не должно врать.
+    const demoRanks = assignRanks(TEAMS.map((t) => t.total))
+    return TEAMS.map((t, i) => ({ id: t.id, rank: demoRanks[i], name: t.name, site: t.site, hue: t.hue, total: t.total }))
   }
   const sb = requireClient()
   const { data, error } = await sb.rpc('get_rating')
   throwOn(error)
-  return (data ?? []).map((t: { id: string; name: string; site: string; hue: number; total: number }, i: number) => ({
-    id: t.id, rank: i + 1, name: t.name, site: t.site ?? '', hue: t.hue, total: Number(t.total),
+  const rows = (data ?? []) as { id: string; name: string; site: string; hue: number; total: number }[]
+  // Места считаем по суммам, а НЕ по индексу в списке: get_rating сортирует по убыванию
+  // очков, а при равенстве — по алфавиту, и место доставалось по букве названия.
+  const ranks = assignRanks(rows.map((t) => Number(t.total)))
+  return rows.map((t, i) => ({
+    id: t.id, rank: ranks[i], name: t.name, site: t.site ?? '', hue: t.hue, total: Number(t.total),
   }))
 }
 

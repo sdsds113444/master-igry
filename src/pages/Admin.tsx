@@ -12,7 +12,7 @@ import { playPing } from '../lib/ping'
 import MentorChatModal from '../components/MentorChatModal'
 import Dialog from '../components/Dialog'
 import ErrorCard from '../components/ErrorCard'
-import { teamAvatar, basename } from '../lib/ui'
+import { teamAvatar, basename, downloadName } from '../lib/ui'
 import { gradeTotal, scoreWrite } from '../lib/scoring'
 
 /** Целое число из поля ввода: защита от NaN и дробей, зажим в [0, max]. */
@@ -42,8 +42,7 @@ export default function Admin() {
   const [published, setPublished] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [dirty, setDirty] = useState(false) // есть несохранённые правки баллов
+  const [saved, setSaved] = useState(false) // последнее сохранение прошло успешно
   const [saveError, setSaveError] = useState('')
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
@@ -53,6 +52,10 @@ export default function Admin() {
   // id команд с несохранёнными правками именно этой сессии — сохраняем ТОЛЬКО их,
   // чтобы не перезаписывать чужие оценки устаревшим снимком (общая админ-учётка).
   const [dirtyTeams, setDirtyTeams] = useState<Set<string>>(new Set())
+  // «Есть несохранённое» — ВЫВОДИМ из dirtyTeams, а не держим отдельным состоянием:
+  // два независимых флага разъезжались, и правки, сделанные во время сохранения,
+  // считались сохранёнными (экран «Баллы сохранены», а в базе их нет).
+  const dirty = dirtyTeams.size > 0
   const [chatTeam, setChatTeam] = useState<AdminTeamRow | null>(null)
   // Ответы команд по выбранной игре (текст + путь к файлу) — источник «сдал/не сдал» и просмотра.
   const [answers, setAnswers] = useState<Record<string, { answer: string; filePath: string | null }>>({})
@@ -118,8 +121,7 @@ export default function Admin() {
         setReviewedTeams(new Set(Object.keys(scores))) // у кого уже есть оценка — уже проверены
         setPublished(false)
         setSaved(false)
-        setDirty(false)
-        setDirtyTeams(new Set())
+        setDirtyTeams(new Set()) // dirty выводится отсюда
       } catch {
         if (!cancelled) setLoadError(true)
       } finally {
@@ -203,7 +205,6 @@ export default function Admin() {
     setGrades((g) => ({ ...g, [id]: { ...g[id], ...patch } }))
     setDirtyTeams((s) => { const n = new Set(s); n.add(id); return n }) // помечаем команду изменённой
     setSaved(false)
-    setDirty(true)
   }, [])
 
   // Пока есть несохранённые баллы — предупреждаем при обновлении/закрытии вкладки
@@ -278,11 +279,18 @@ export default function Admin() {
         return next
       })
 
-      setSaved(true)
       // Сохранённые команды теперь проверены — гасим у них красную точку «на проверку».
       setReviewedTeams((prev) => { const n = new Set(prev); changed.forEach((t) => n.add(t.id)); return n })
-      setDirty(false)
-      setDirtyTeams(new Set())
+      // Снимаем «несохранённое» ТОЧЕЧНО — только с тех команд, что реально ушли в этом
+      // сохранении. Раньше множество обнулялось целиком, и правки, сделанные ПОКА шёл
+      // запрос, считались сохранёнными: экран показывал «Баллы сохранены», а баллы
+      // оставались только на экране до перезагрузки.
+      setDirtyTeams((prev) => {
+        const n = new Set(prev)
+        changed.forEach((t) => n.delete(t.id))
+        return n
+      })
+      setSaved(true)
     } catch {
       setSaveError('Не удалось сохранить баллы. Проверьте соединение и попробуйте ещё раз.')
     } finally {
@@ -412,6 +420,7 @@ export default function Admin() {
                     needsReview={pendingReview.has(t.id)}
                     unread={mentorUnread.has(t.id)}
                     saving={saving}
+                    alreadyGraded={reviewedTeams.has(t.id)}
                     onUpd={upd}
                     onChat={openTeamChat}
                     onView={setViewTeam}
@@ -434,6 +443,7 @@ export default function Admin() {
                 needsReview={pendingReview.has(t.id)}
                 unread={mentorUnread.has(t.id)}
                 saving={saving}
+                alreadyGraded={reviewedTeams.has(t.id)}
                 onUpd={upd}
                 onChat={openTeamChat}
                 onView={setViewTeam}
@@ -461,7 +471,9 @@ export default function Admin() {
             disabled={loading || saving || !dirty}
             className="btn-alfa flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-bold disabled:opacity-60"
           >
-            {saving ? <Loader2 size={16} className="animate-spin" /> : saved ? <><Check size={16} /> Баллы сохранены</> : <><RefreshCw size={16} /> Сохранить и обновить рейтинг</>}
+            {/* «Баллы сохранены» — только когда несохранённого не осталось: если во время
+                запроса тренер успел что-то ещё изменить, кнопка снова зовёт сохранить. */}
+            {saving ? <Loader2 size={16} className="animate-spin" /> : saved && !dirty ? <><Check size={16} /> Баллы сохранены</> : <><RefreshCw size={16} /> Сохранить и обновить рейтинг</>}
           </motion.button>
         </div>
       </div>
@@ -545,9 +557,10 @@ function AnswerView({ team, data, onClose }: {
   const [downloadError, setDownloadError] = useState('')
   const fileName = data?.filePath ? basename(data.filePath) : null
 
-  // Сбрасываем ошибку при смене команды: AnswerView остаётся смонтированным между
-  // открытиями (условен только Dialog внутри), иначе прошлая ошибка висела бы над новым ответом.
-  useEffect(() => { setDownloadError('') }, [team])
+  // Сбрасываем ошибку И флаг загрузки при смене команды: AnswerView остаётся смонтированным
+  // между открытиями (условен только Dialog внутри). Без сброса downloading зависшее скачивание
+  // одной команды оставляло кнопку «Скачать» серой у ВСЕХ остальных до перезагрузки страницы.
+  useEffect(() => { setDownloadError(''); setDownloading(false) }, [team])
 
   async function download() {
     if (!data?.filePath || downloading) return
@@ -566,7 +579,11 @@ function AnswerView({ team, data, onClose }: {
       const objUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = objUrl
-      a.download = fileName ?? 'answer'
+      // Имя команды в начале имени файла: путь в бакете (teamId/gameId/...) при скачивании
+      // отбрасывается, и все команды присылают ОДИН И ТОТ ЖЕ шаблон кейсов — в «Загрузках»
+      // получалось cases-noforward.xlsx, (1), (2)… без признака владельца, и легко было
+      // выставить баллы не той команде.
+      a.download = downloadName(team?.name, fileName)
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -774,7 +791,7 @@ function FeedbackFileControl({ g, onChange, busy }: { g: Grade; onChange: (patch
  *  команда, чей grade изменился, а не все ~30 строк на каждый ввод символа. Опирается
  *  на СТАБИЛЬНЫЕ пропсы onUpd/onChat/onView (см. useCallback/setState в Admin). */
 const GradeRowDesktop = memo(function GradeRowDesktop({
-  t, g, hasAnswer, needsReview, unread, saving, onUpd, onChat, onView, onRoster,
+  t, g, hasAnswer, needsReview, unread, saving, alreadyGraded, onUpd, onChat, onView, onRoster,
 }: {
   t: AdminTeamRow
   g: Grade
@@ -782,6 +799,8 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
   needsReview: boolean
   unread: boolean
   saving: boolean
+  /** У команды уже есть СОХРАНЁННАЯ оценка (строка в scores). Снятие «сдала» её обнулит. */
+  alreadyGraded: boolean
   onUpd: (id: string, patch: Partial<Grade>) => void
   onChat: (t: AdminTeamRow) => void
   onView: (t: AdminTeamRow) => void
@@ -789,6 +808,15 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
 }) {
   const sum = gradeTotal(g)
   const onChange = (patch: Partial<Grade>) => onUpd(t.id, patch)
+  // Снятие «сдала» обнуляет ВСЮ строку (баллы, VOC, комментарий, файл разбора) — см.
+  // scoreWrite. Для уже оценённой команды спрашиваем подтверждение: случайное касание
+  // чекбокса стирало неделю без следа, а прежних значений нигде не остаётся.
+  const onToggleSubmitted = (next: boolean) => {
+    if (!next && alreadyGraded && !window.confirm(
+      `Снять отметку «сдала» у команды «${t.name}»?\n\nПри сохранении обнулятся баллы, VOC, комментарий и файл разбора за эту неделю. Отменить это будет нельзя.`
+    )) return
+    onChange({ submitted: next })
+  }
   return (
     <tr className="border-t border-black/5 sf-hoversoft">
       <td className="px-5 py-2.5">
@@ -835,7 +863,7 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
           checked={g.submitted}
           disabled={hasAnswer}
           title={hasAnswer ? 'Команда сдала ответ — снять нельзя (иначе сохранение обнулило бы её оценку)' : undefined}
-          onChange={(e) => onChange({ submitted: e.target.checked })}
+          onChange={(e) => onToggleSubmitted(e.target.checked)}
           className="h-5 w-5 accent-[var(--color-alfa)] disabled:cursor-not-allowed"
         />
       </td>
@@ -883,7 +911,7 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
 
 /** Карточка оценивания одной команды для мобильной раскладки (замена строки таблицы). */
 const GradeCard = memo(function GradeCard({
-  t, g, hasAnswer, needsReview, unread, saving, onUpd, onChat, onView, onRoster,
+  t, g, hasAnswer, needsReview, unread, saving, alreadyGraded, onUpd, onChat, onView, onRoster,
 }: {
   t: AdminTeamRow
   g: Grade
@@ -891,6 +919,8 @@ const GradeCard = memo(function GradeCard({
   needsReview: boolean
   unread: boolean
   saving: boolean
+  /** У команды уже есть СОХРАНЁННАЯ оценка (строка в scores). Снятие «сдала» её обнулит. */
+  alreadyGraded: boolean
   onUpd: (id: string, patch: Partial<Grade>) => void
   onChat: (t: AdminTeamRow) => void
   onView: (t: AdminTeamRow) => void
@@ -898,6 +928,15 @@ const GradeCard = memo(function GradeCard({
 }) {
   const sum = gradeTotal(g)
   const onChange = (patch: Partial<Grade>) => onUpd(t.id, patch)
+  // Снятие «сдала» обнуляет ВСЮ строку (баллы, VOC, комментарий, файл разбора) — см.
+  // scoreWrite. Для уже оценённой команды спрашиваем подтверждение: случайное касание
+  // чекбокса стирало неделю без следа, а прежних значений нигде не остаётся.
+  const onToggleSubmitted = (next: boolean) => {
+    if (!next && alreadyGraded && !window.confirm(
+      `Снять отметку «сдала» у команды «${t.name}»?\n\nПри сохранении обнулятся баллы, VOC, комментарий и файл разбора за эту неделю. Отменить это будет нельзя.`
+    )) return
+    onChange({ submitted: next })
+  }
   const fieldCls =
     'w-full rounded-lg border border-black/10 sf-3 px-2 py-1.5 text-center font-bold outline-none focus:border-alfa/50 disabled:opacity-40'
   return (
@@ -952,7 +991,7 @@ const GradeCard = memo(function GradeCard({
           checked={g.submitted}
           disabled={hasAnswer}
           title={hasAnswer ? 'Команда сдала ответ — снять нельзя (иначе сохранение обнулило бы её оценку)' : undefined}
-          onChange={(e) => onChange({ submitted: e.target.checked })}
+          onChange={(e) => onToggleSubmitted(e.target.checked)}
           className="h-5 w-5 accent-[var(--color-alfa)] disabled:cursor-not-allowed"
         />
       </label>

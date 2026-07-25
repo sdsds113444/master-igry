@@ -1,5 +1,26 @@
 import { describe, it, expect } from 'vitest'
-import { teamTotal, gradeTotal, scoreWrite, BONUS_POINTS, SUPER_BONUS_VOK_POINTS } from './scoring'
+import { teamTotal, gradeTotal, scoreWrite, assignRanks, BONUS_POINTS, SUPER_BONUS_VOK_POINTS } from './scoring'
+
+describe('assignRanks (места при равных баллах)', () => {
+  it('равные суммы делят одно место, следующее — со сдвигом', () => {
+    expect(assignRanks([7, 5, 5, 3])).toEqual([1, 2, 2, 4])
+  })
+  it('все разные — обычная нумерация', () => {
+    expect(assignRanks([9, 7, 4, 1])).toEqual([1, 2, 3, 4])
+  })
+  it('все одинаковые (до старта сезона) — у всех первое место', () => {
+    expect(assignRanks([0, 0, 0])).toEqual([1, 1, 1])
+  })
+  it('ничья на первом месте: обе команды получают 1-е, следующая — 3-е', () => {
+    expect(assignRanks([5, 5, 4])).toEqual([1, 1, 3])
+  })
+  it('хвост из нулей делит одно место, а не растёт по алфавиту', () => {
+    expect(assignRanks([3, 1, 0, 0, 0])).toEqual([1, 2, 3, 3, 3])
+  })
+  it('пустой список не падает', () => {
+    expect(assignRanks([])).toEqual([])
+  })
+})
 
 describe('teamTotal', () => {
   it('суммирует кейсы + бонус + супер-бонус VOC (проценты НЕ входят)', () => {
