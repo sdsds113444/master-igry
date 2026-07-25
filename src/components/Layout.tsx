@@ -4,7 +4,7 @@ import { LayoutDashboard, Users, ShieldCheck, LogOut, BookOpen, MessageSquarePlu
 import Background from './Background'
 import ThemeToggle from './ThemeToggle'
 import FeedbackModal from './FeedbackModal'
-import DeadlineBanner from './DeadlineBanner'
+import DeadlineBanner, { SUBMITTED_EVENT } from './DeadlineBanner'
 import DeadlineModal from './DeadlineModal'
 import { URM_SEEN_KEY } from './UrmNoticeModal'
 import { getSession, signOut, getGames, pickCurrentGame, getSubmission } from '../lib/db'
@@ -31,13 +31,18 @@ export default function Layout() {
   useEffect(() => {
     if (role === 'admin' || !teamId) return
     let stopped = false
+    // Запусков теперь три (монтирование, focus, событие о сдаче) — нумеруем их, чтобы
+    // ответ медленного раннего запроса не лёг ПОВЕРХ свежего и не вернул плашку
+    // «Поторопитесь сдать» после того, как команда уже сдала.
+    let seq = 0
     async function load() {
+      const mySeq = ++seq
       try {
         const cur = pickCurrentGame(await getGames())
-        if (stopped) return
+        if (stopped || mySeq !== seq) return
         if (!cur) { setDeadline({ at: null, submitted: false }); return }
         const sub = await getSubmission(teamId!, cur.id)
-        if (stopped) return
+        if (stopped || mySeq !== seq) return
         setDeadline({
           at: cur.deadline_at ?? null,
           submitted: !!sub && (sub.answer.trim().length > 0 || !!sub.fileName),
@@ -46,7 +51,15 @@ export default function Layout() {
     }
     load()
     window.addEventListener('focus', load)
-    return () => { stopped = true; window.removeEventListener('focus', load) }
+    // Кабинет сообщает об успешной сдаче — плашка должна погаснуть СРАЗУ. Без этого она
+    // висела «Поторопитесь сдать ответ» поверх зелёного «Ответ отправлен», пока человек
+    // не переключит вкладку, и капитаны отправляли ответ повторно.
+    window.addEventListener(SUBMITTED_EVENT, load)
+    return () => {
+      stopped = true
+      window.removeEventListener('focus', load)
+      window.removeEventListener(SUBMITTED_EVENT, load)
+    }
   }, [teamId, role])
 
   // Модалка поверх всего — при заходе команде, которая ещё не сдала. Показываем ОДИН раз

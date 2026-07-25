@@ -286,8 +286,11 @@ export async function getRoster(teamId: string): Promise<RosterMember[]> {
     return mockRoster[teamId] ?? (mockRoster[teamId] = seedRoster())
   }
   const sb = requireClient()
+  // Сортировка ДЕТЕРМИНИРОВАННАЯ: ord у всех по умолчанию 0, поэтому без доп. ключей
+  // порядок задавала физическая раскладка строк — после правки ФИО или смены капитана
+  // человек «уезжал» в конец списка, и команда думала, что состав перемешался/потерялся.
   const { data, error } = await sb.from('roster').select('id, full_name, is_captain').eq('team_id', teamId)
-    .order('is_captain', { ascending: false }).order('ord')
+    .order('is_captain', { ascending: false }).order('ord').order('created_at').order('id')
   throwOn(error)
   return (data ?? []).map((r) => ({ id: r.id as string, name: r.full_name as string, isCaptain: !!r.is_captain }))
 }
@@ -728,14 +731,17 @@ export async function listMentorLatestFromTeams(): Promise<Record<string, number
 
 /** Для команды: время последнего сообщения ОТ ТРЕНЕРА (sender_role='admin') в её
  *  чате с тренером, или 0. Сравнивается с getMentorSeen(teamId). */
-export async function getMentorLatestFromTrainer(teamId: string): Promise<number> {
+/** null — ПРОЧИТАТЬ НЕ УДАЛОСЬ (сеть моргнула), 0 — тренер ещё не писал. Раньше оба
+ *  случая давали 0, и «прочитано» записывалось как 1970 год: точка «новый ответ тренера»
+ *  загоралась намертво, а новых сообщений в чате не было. */
+export async function getMentorLatestFromTrainer(teamId: string): Promise<number | null> {
   if (!isSupabaseConfigured) return 0
   const sb = requireClient()
   const { data, error } = await sb.from('messages')
     .select('created_at')
     .eq('team_id', teamId).eq('channel', 'mentor').eq('sender_role', 'admin')
     .order('created_at', { ascending: false }).limit(1).maybeSingle()
-  if (error) return 0
+  if (error) return null
   return data?.created_at ? new Date(data.created_at as string).getTime() : 0
 }
 
@@ -799,11 +805,13 @@ export async function getSubmission(teamId: string, gameId: string): Promise<{ a
     return m ? { answer: m.answer, fileName: m.fileName, filePath: null } : null
   }
   const sb = requireClient()
-  const { data, error } = await sb.from('answers').select('text, file_url').eq('team_id', teamId).eq('game_id', gameId).maybeSingle()
+  const { data, error } = await sb.from('answers').select('text, file_url, file_name').eq('team_id', teamId).eq('game_id', gameId).maybeSingle()
   throwOn(error)
   if (!data) return null
   const filePath = (data.file_url as string) ?? null
-  return { answer: (data.text as string) ?? '', fileName: filePath ? basename(filePath) : null, filePath }
+  // Показываем исходное имя; basename(путь) — фолбэк для файлов, сданных до миграции.
+  const fileName = (data.file_name as string) ?? (filePath ? basename(filePath) : null)
+  return { answer: (data.text as string) ?? '', fileName, filePath }
 }
 
 /** Приём ответов по этому заданию закрыт (дедлайн прошёл или игра больше не текущая).
@@ -854,8 +862,10 @@ export async function submitAnswer(input: SubmitInput): Promise<{ fileUploaded: 
   })
   if (upErr) return { fileUploaded: false }
 
+  // file_name — исходное имя, как его выбрал человек: ключ объекта транслитерирован
+  // (кириллица в Storage даёт 400), и без этой колонки команда видела у скрепки чужое имя.
   const { error: linkErr } = await sb.from('answers')
-    .upsert({ team_id: input.teamId, game_id: input.gameId, file_url: path }, { onConflict: 'team_id,game_id' })
+    .upsert({ team_id: input.teamId, game_id: input.gameId, file_url: path, file_name: input.file.name }, { onConflict: 'team_id,game_id' })
   // Файл в бакете, но ссылку записать не вышло — тренер его не увидит, честно говорим «нет».
   return { fileUploaded: !linkErr }
 }
@@ -988,14 +998,20 @@ export async function getScoresForGame(gameId: string): Promise<Record<string, G
 
 /** Ответы всех команд по игре (для админки): текст + путь к файлу. Ключ — team_id.
  *  Даёт и «кто сдал» (наличие строки в answers), и содержимое для проверки. */
-export async function getAnswersForGame(gameId: string): Promise<Record<string, { answer: string; filePath: string | null }>> {
+export async function getAnswersForGame(gameId: string): Promise<Record<string, { answer: string; filePath: string | null; fileName: string | null }>> {
   if (!isSupabaseConfigured) return {}
   const sb = requireClient()
-  const { data, error } = await sb.from('answers').select('team_id, text, file_url').eq('game_id', gameId)
+  const { data, error } = await sb.from('answers').select('team_id, text, file_url, file_name').eq('game_id', gameId)
   throwOn(error)
-  const out: Record<string, { answer: string; filePath: string | null }> = {}
+  const out: Record<string, { answer: string; filePath: string | null; fileName: string | null }> = {}
   for (const r of data ?? []) {
-    out[r.team_id as string] = { answer: (r.text as string) ?? '', filePath: (r.file_url as string) ?? null }
+    const filePath = (r.file_url as string) ?? null
+    out[r.team_id as string] = {
+      answer: (r.text as string) ?? '',
+      filePath,
+      // Исходное имя; для файлов, сданных до миграции, — из пути (транслитерированное).
+      fileName: (r.file_name as string) ?? (filePath ? basename(filePath) : null),
+    }
   }
   return out
 }
@@ -1008,7 +1024,12 @@ export async function getGames(): Promise<Game[]> {
   const sb = requireClient()
   const { data, error } = await sb.from('games').select('id, num, week, title, skill, emoji, accent, status, video_url, file_url, deadline_at').order('num')
   throwOn(error)
-  return (data as Game[] | null)?.length ? (data as Game[]) : GAMES
+  // НИКАКОГО отката на демо-игры: пустой ответ на живой базе значит «не смогли прочитать»
+  // (протухла анонимная сессия — RLS отдаёт 0 строк без ошибки), а не «сезона нет».
+  // Раньше в этом случае доска молча показывала ДЕМО-сезон: чужие игры, «Неделя 4 из 9»,
+  // и человек шёл к тренеру с вопросом, почему игру недели закрыли без него.
+  // Пустой список вызывающие уже обрабатывают («Игры сезона ещё не настроены»).
+  return (data as Game[] | null) ?? []
 }
 
 /** Активная игра недели: последняя (по номеру) в статусе 'current'. Если ни одна игра

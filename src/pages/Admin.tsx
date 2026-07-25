@@ -5,7 +5,7 @@ import { type Game } from '../data/mock'
 import {
   listAllTeamsAdmin, getScoresForGame, gradeMany, getGames, publishGame, pickCurrentGame,
   getAnswersForGame, getAnswerFileUrl, uploadFeedbackFile, listMentorLatestFromTeams, getMentorSeen, markMentorSeen,
-  getRoster, listFeedback, setFeedbackStatus, type AdminTeamRow, type FeedbackRow, type RosterMember,
+  getRoster, listFeedback, setFeedbackStatus, type AdminTeamRow, type FeedbackRow, type RosterMember, type GradeRow,
 } from '../lib/db'
 
 import { playPing } from '../lib/ping'
@@ -14,6 +14,18 @@ import Dialog from '../components/Dialog'
 import ErrorCard from '../components/ErrorCard'
 import { teamAvatar, basename, downloadName } from '../lib/ui'
 import { gradeTotal, scoreWrite } from '../lib/scoring'
+
+/** Строка оценивания из серверных данных. Общая для первой загрузки и фонового
+ *  обновления — иначе они разъезжались в трактовке «сдала».
+ *  «Сдала» определяется наличием ответа в answers, а не величиной баллов: иначе команда,
+ *  сдавшая ответ и получившая 0, после перезагрузки выглядела бы «не сдала». */
+function buildGrade(s: GradeRow | undefined, hasAnswer: boolean): Grade {
+  const submitted = hasAnswer
+    || (s ? (s.cases > 0 || s.bonus > 0 || s.superBonusVok > 0 || s.vok > 0 || !!s.feedback || !!s.feedbackFile) : false)
+  return s
+    ? { submitted, cases: s.cases, bonus: s.bonus > 0, vok: s.vok, superBonusVok: s.superBonusVok > 0, feedback: s.feedback, feedbackFile: s.feedbackFile, feedbackFileName: s.feedbackFileName, pendingFile: null }
+    : { submitted, cases: 0, bonus: false, vok: 0, superBonusVok: false, feedback: '', feedbackFile: null, feedbackFileName: null, pendingFile: null }
+}
 
 /** Целое число из поля ввода: защита от NaN и дробей, зажим в [0, max]. */
 function clampNum(raw: string, max: number): number {
@@ -56,12 +68,28 @@ export default function Admin() {
   // два независимых флага разъезжались, и правки, сделанные во время сохранения,
   // считались сохранёнными (экран «Баллы сохранены», а в базе их нет).
   const dirty = dirtyTeams.size > 0
+  // Зеркала для фонового обновления: колбэк таймера/focus живёт со старым замыканием,
+  // а ему нужно ТЕКУЩЕЕ состояние, иначе он затрёт свежий ввод тренера.
+  // Зеркала обновляются СИНХРОННО в местах изменения (upd/saveAll), а не в эффекте:
+  // passive-эффект React выполняет отдельной задачей уже после коммита, и колбэк .then
+  // фонового обновления (микротаск) успевал прочитать устаревшее значение — то есть
+  // затереть только что введённый балл. Эффекты ниже оставлены как страховка.
+  const dirtyRef = useRef<Set<string>>(dirtyTeams)
+  const savingRef = useRef(false)
+  const saveGenRef = useRef(0)          // растёт после каждого успешного сохранения
+  useEffect(() => { dirtyRef.current = dirtyTeams }, [dirtyTeams])
+  useEffect(() => { savingRef.current = saving }, [saving])
   const [chatTeam, setChatTeam] = useState<AdminTeamRow | null>(null)
   // Ответы команд по выбранной игре (текст + путь к файлу) — источник «сдал/не сдал» и просмотра.
-  const [answers, setAnswers] = useState<Record<string, { answer: string; filePath: string | null }>>({})
+  const [answers, setAnswers] = useState<Record<string, { answer: string; filePath: string | null; fileName: string | null }>>({})
   // Команды, по которым УЖЕ есть строка оценки (= проверены). Красная точка «сдали, но не
   // проверено» горит у тех, кто прислал реальный ответ, но кого тут ещё нет. Гаснет при сохранении.
   const [reviewedTeams, setReviewedTeams] = useState<Set<string>>(new Set())
+  // Зеркала для проверки «пришёл пустой снимок, а на экране было не пусто» (см. refresh).
+  const answersRef = useRef(answers)
+  const reviewedRef = useRef(reviewedTeams)
+  useEffect(() => { answersRef.current = answers }, [answers])
+  useEffect(() => { reviewedRef.current = reviewedTeams }, [reviewedTeams])
   const [viewTeam, setViewTeam] = useState<AdminTeamRow | null>(null)
   const [rosterTeam, setRosterTeam] = useState<AdminTeamRow | null>(null) // «провалиться» и посмотреть состав
   // «Пипочка»: по каждой команде — время последнего сообщения от неё в чате с тренером.
@@ -106,16 +134,7 @@ export default function Admin() {
         ])
         if (cancelled) return
         const init: Record<string, Grade> = {}
-        for (const t of teams) {
-          const s = scores[t.id]
-          // «Сдала» определяется наличием ответа в таблице answers, а не величиной баллов —
-          // иначе команда, сдавшая ответ и получившая 0, после перезагрузки выглядела бы «не сдала».
-          const submitted = !!ans[t.id]
-            || (s ? (s.cases > 0 || s.bonus > 0 || s.superBonusVok > 0 || s.vok > 0 || !!s.feedback || !!s.feedbackFile) : false)
-          init[t.id] = s
-            ? { submitted, cases: s.cases, bonus: s.bonus > 0, vok: s.vok, superBonusVok: s.superBonusVok > 0, feedback: s.feedback, feedbackFile: s.feedbackFile, feedbackFileName: s.feedbackFileName, pendingFile: null }
-            : { submitted, cases: 0, bonus: false, vok: 0, superBonusVok: false, feedback: '', feedbackFile: null, feedbackFileName: null, pendingFile: null }
-        }
+        for (const t of teams) init[t.id] = buildGrade(scores[t.id], !!ans[t.id])
         setGrades(init)
         setAnswers(ans)
         setReviewedTeams(new Set(Object.keys(scores))) // у кого уже есть оценка — уже проверены
@@ -132,6 +151,53 @@ export default function Admin() {
     return () => { cancelled = true }
   }, [gameId, teams])
 
+  // Фоновое обновление ответов и оценок: раз в минуту и при возврате на вкладку.
+  // Без него тренер, оставивший админку открытой на неделю, весь день видел «0 сдали»,
+  // серые иконки ответов и мог скачать УСТАРЕВШИЙ файл команды, которая перезалила его.
+  // Строки команд с несохранёнными правками НЕ трогаем — иначе затёрли бы ввод тренера.
+  useEffect(() => {
+    if (!gameId || teams.length === 0) return
+    let stopped = false
+    let lastRunAt = 0
+    async function refresh() {
+      // Во время сохранения не лезем: saveAll сам разложит свежее состояние.
+      if (savingRef.current) return
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      // Троттлинг: слушателей focus теперь два (этот и опрос сообщений), а getAnswersForGame
+      // тянет полные тексты ответов всех команд — без него каждое переключение окна
+      // означало бы лишний тяжёлый запрос к бесплатному тарифу Supabase.
+      const now = Date.now()
+      if (now - lastRunAt < 15000) return
+      lastRunAt = now
+      // Поколение сохранений на момент старта запроса: если пока мы ходили в сеть, тренер
+      // успел сохранить, наш снимок УЖЕ устарел и накрывать им свежие баллы нельзя
+      // (dirtyRef тут не спасает — saveAll как раз очистил его для сохранённых команд).
+      const genAtStart = saveGenRef.current
+      try {
+        const [scores, ans] = await Promise.all([getScoresForGame(gameId), getAnswersForGame(gameId)])
+        if (stopped || savingRef.current || saveGenRef.current !== genAtStart) return
+        // Пустой ответ без ошибки = скорее всего пересоздалась анонимная сессия и RLS
+        // молча отдала 0 строк (is_admin() стал false). Принять это за правду значит
+        // обнулить всю таблицу оценивания на экране. Пропускаем такой снимок.
+        if (Object.keys(scores).length === 0 && Object.keys(ans).length === 0
+            && (Object.keys(answersRef.current).length > 0 || reviewedRef.current.size > 0)) return
+        setAnswers(ans)
+        setReviewedTeams(new Set(Object.keys(scores)))
+        setGrades((prev) => {
+          const next = { ...prev }
+          for (const t of teams) {
+            if (dirtyRef.current.has(t.id)) continue // несохранённый ввод тренера важнее снимка
+            next[t.id] = buildGrade(scores[t.id], !!ans[t.id])
+          }
+          return next
+        })
+      } catch { /* тихо: это фоновое обновление, экран уже что-то показывает */ }
+    }
+    const timer = window.setInterval(refresh, 60000)
+    window.addEventListener('focus', refresh)
+    return () => { stopped = true; window.clearInterval(timer); window.removeEventListener('focus', refresh) }
+  }, [gameId, teams])
+
   // Опрос непрочитанных сообщений от команд: раз в 45с (не критична секундная
   // свежесть, важно не грузить бесплатный тариф Supabase лишними запросами при
   // нескольких одновременных тестерах) + при возврате на вкладку. Звук — когда
@@ -146,6 +212,17 @@ export default function Admin() {
         const latest = await listMentorLatestFromTeams()
         if (stopped) return
         setMentorLatest(latest)
+        // Чат этой команды открыт И вкладка на экране — значит сообщение реально читают:
+        // помечаем прочитанным, иначе точка со звуком загорались бы снова на то, что
+        // тренер уже видел. Проверка видимости обязательна: сам опрос намеренно работает
+        // и в фоновой вкладке (ради звука), а вот «прочитано» в свёрнутом окне — ложь,
+        // там сообщение даже не отрисовано (фолбэк-опрос чата в фоне не тянет историю).
+        const openId = openChatTeamId.current
+        const visible = typeof document === 'undefined' || document.visibilityState === 'visible'
+        if (openId && visible && latest[openId]) {
+          markMentorSeen(openId, latest[openId])
+          setSeenTick((n) => n + 1)
+        }
         const prev = prevMentorLatest.current
         if (prev !== null) {
           const hasNew = Object.keys(latest).some((tid) =>
@@ -181,6 +258,19 @@ export default function Admin() {
     setSeenTick((n) => n + 1)
     openChatTeamId.current = t.id
     setChatTeam(t)
+    // Карта непрочитанных обновляется раз в 45 с, поэтому на момент открытия она может
+    // отставать: сообщение, пришедшее после последнего опроса, осталось бы «непрочитанным»,
+    // и точка загоралась бы снова сразу после закрытия чата. Догоняем свежим снимком.
+    listMentorLatestFromTeams()
+      .then((fresh) => {
+        setMentorLatest(fresh)
+        const ts = fresh[t.id]
+        if (ts && openChatTeamId.current === t.id) {
+          markMentorSeen(t.id, ts)
+          setSeenTick((n) => n + 1)
+        }
+      })
+      .catch(() => { /* не критично: догонит следующий опрос */ })
   }, [mentorLatest])
 
   // Красная точка «сдали, но не проверено»: реальный ответ (текст/файл) есть, а строки
@@ -204,6 +294,9 @@ export default function Admin() {
   const upd = useCallback((id: string, patch: Partial<Grade>) => {
     setGrades((g) => ({ ...g, [id]: { ...g[id], ...patch } }))
     setDirtyTeams((s) => { const n = new Set(s); n.add(id); return n }) // помечаем команду изменённой
+    // Синхронно, ДО коммита React: фоновое обновление может прочитать ref раньше, чем
+    // отработает passive-эффект, и затереть только что введённое значение.
+    dirtyRef.current = new Set(dirtyRef.current).add(id)
     setSaved(false)
   }, [])
 
@@ -227,6 +320,7 @@ export default function Admin() {
 
   async function saveAll() {
     setSaving(true)
+    savingRef.current = true // синхронно: фоновое обновление не должно влезть в этот момент
     setSaveError('')
     try {
       // КРИТИЧНО: пишем ТОЛЬКО реально изменённые в этой сессии команды, а не весь батч по
@@ -290,11 +384,19 @@ export default function Admin() {
         changed.forEach((t) => n.delete(t.id))
         return n
       })
+      // Синхронно, чтобы фоновое обновление сразу видело актуальный набор «грязных».
+      const nextDirty = new Set(dirtyRef.current)
+      changed.forEach((t) => nextDirty.delete(t.id))
+      dirtyRef.current = nextDirty
       setSaved(true)
+      // Снимок, улетевший ДО этого сохранения, теперь устарел — фоновое обновление
+      // отбросит его по несовпадению поколения, а не накроет им свежие баллы.
+      saveGenRef.current += 1
     } catch {
       setSaveError('Не удалось сохранить баллы. Проверьте соединение и попробуйте ещё раз.')
     } finally {
       setSaving(false)
+      savingRef.current = false
     }
   }
 
@@ -550,12 +652,14 @@ function RosterView({ team, onClose }: { team: AdminTeamRow | null; onClose: () 
 /** Просмотр ответа команды тренером: текст + скачивание файла (подписанная ссылка). */
 function AnswerView({ team, data, onClose }: {
   team: AdminTeamRow | null
-  data?: { answer: string; filePath: string | null }
+  data?: { answer: string; filePath: string | null; fileName: string | null }
   onClose: () => void
 }) {
   const [downloading, setDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState('')
-  const fileName = data?.filePath ? basename(data.filePath) : null
+  // Исходное имя, как его дала команда (ключ в Storage транслитерирован); для файлов,
+  // сданных до появления колонки file_name, — имя из пути.
+  const fileName = data?.fileName ?? (data?.filePath ? basename(data.filePath) : null)
 
   // Сбрасываем ошибку И флаг загрузки при смене команды: AnswerView остаётся смонтированным
   // между открытиями (условен только Dialog внутри). Без сброса downloading зависшее скачивание

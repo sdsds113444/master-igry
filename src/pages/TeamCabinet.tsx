@@ -27,6 +27,7 @@ import VideoModal from '../components/VideoModal'
 import MentorChatModal from '../components/MentorChatModal'
 import ImageLightbox from '../components/ImageLightbox'
 import ChatThread from '../components/ChatThread'
+import { SUBMITTED_EVENT } from '../components/DeadlineBanner'
 import Badge from '../components/Badge'
 import ErrorCard from '../components/ErrorCard'
 import Icon3D, { EMOJI_ICON_3D, GAME_ICON_3D } from '../components/Icon3D'
@@ -202,7 +203,7 @@ export default function TeamCabinet() {
       // когда на него и так смотрят).
       try {
         const latest = await getMentorLatestFromTrainer(me!.id)
-        if (stopped) return
+        if (stopped || latest === null) return // не прочитали — пропускаем тик, а не гасим/зажигаем точку наугад
         const unread = latest > getMentorSeen(me!.id)
         setMentorUnread(unread)
         // Звук — только на НОВЫЙ ответ тренера и только если чат закрыт: если он открыт,
@@ -267,8 +268,11 @@ export default function TeamCabinet() {
   // (а не Date.now() клиента) — иначе «пипочка» врёт при сбитых часах устройства.
   async function markMentorRead() {
     if (!me) return
-    let ts = Date.now()
-    try { ts = await getMentorLatestFromTrainer(me.id) } catch { /* оставляем Date.now() */ }
+    let ts: number | null = null
+    try { ts = await getMentorLatestFromTrainer(me.id) } catch { ts = null }
+    // Не смогли прочитать (сеть моргнула) — НЕ трогаем «прочитано» вообще. Раньше сюда
+    // прилетал 0, read-state уезжал в 1970, и точка загоралась намертво.
+    if (ts === null) return
     markMentorSeen(me.id, ts)
   }
 
@@ -404,7 +408,15 @@ export default function TeamCabinet() {
       // Подтверждаем, что реально сохранилось (сбой чтения не критичен — upsert уже прошёл).
       try {
         const fresh = await getSubmission(me.id, current.id)
-        if (fresh) { setAnswer(fresh.answer); setFileAttached(fresh.fileName) }
+        if (fresh) {
+          setAnswer(fresh.answer)
+          // fileAttached — ВСЕГДА серверная правда: на нём завязан не только текст кнопки,
+          // но и экран закрытого дедлайна («Ваш ответ сохранён — тренер его увидит»).
+          // Если оставить тут локально выбранное имя после неудачной загрузки, этот экран
+          // соврёт про сохранённый файл, которого в Storage нет.
+          // Выбранный, но ещё не загруженный файл показывает сама кнопка — через `file`.
+          setFileAttached(fresh.fileName)
+        }
       } catch { /* данные не потеряны */ }
       if (hadFile && !res.fileUploaded) {
         // Текст сохранён, а файл — нет. НЕ показываем зелёный «отправлено» (иначе экран
@@ -417,6 +429,9 @@ export default function TeamCabinet() {
       }
       setFile(null)
       setSent(true) // полный успех: текст (и файл, если был) сохранены
+      // Сообщаем Layout: плашка/модалка дедлайна должны погаснуть сразу, иначе поверх
+      // «Ответ отправлен» продолжает висеть «Поторопитесь сдать ответ».
+      window.dispatchEvent(new Event(SUBMITTED_EVENT))
     } catch (e) {
       // Сервер закрыл приём (дедлайн прошёл / игра больше не текущая) — это НЕ сеть.
       // Раньше такой отказ выглядел как «проверьте соединение», и команда искала
@@ -744,7 +759,11 @@ export default function TeamCabinet() {
                   <label className="tap flex max-w-full cursor-pointer items-center gap-2 rounded-2xl sf-2 px-4 py-2.5 text-sm font-bold transition-colors sf-hover focus-within:ring-2 focus-within:ring-alfa">
                     <Upload size={16} className="shrink-0" />
                     <span className="truncate">
-                      {fileAttached ? fileAttached : 'Прикрепить заполненный файл'}
+                      {/* Выбранный, но ещё не отправленный файл (`file`) важнее сохранённого:
+                          после неудачной загрузки человек должен видеть ИМЕННО то, что он
+                          только что выбрал, иначе подсказка «прикрепите ещё раз» выглядит
+                          так, будто выбор не сработал. */}
+                      {file?.name ?? fileAttached ?? 'Прикрепить заполненный файл'}
                     </span>
                     {/* sr-only (а не hidden/display:none): input остаётся в tab-порядке и
                         фокусируется с клавиатуры; фокус виден на label через focus-within. */}
@@ -764,6 +783,11 @@ export default function TeamCabinet() {
                         setSendError('')
                         setFile(f)
                         if (f) setFileAttached(f.name)
+                        // Сбрасываем значение поля: иначе повторный выбор ТОГО ЖЕ файла
+                        // (после неудачной загрузки — «прикрепите ещё раз») не вызывает
+                        // change, на экране ничего не меняется, и человек решает, что
+                        // кнопка сломана. Сам файл уже сохранён в состоянии выше.
+                        e.target.value = ''
                       }}
                     />
                   </label>
@@ -987,7 +1011,9 @@ export default function TeamCabinet() {
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-bold">{g.title}</div>
                         <div className="text-xs font-semibold text-ink-soft">
-                          кейсы {s.cases}
+                          {/* «из 3» — чтобы шкала была очевидна: оценка за кейсы одна на
+                              всю неделю, а не по баллу за каждый из 10 кейсов. */}
+                          кейсы {s.cases} из 3
                           {s.bonus > 0 && ` · бонус +${s.bonus}`}
                           {superVok > 0 && ` · супер VOC +${superVok}`}
                         </div>
