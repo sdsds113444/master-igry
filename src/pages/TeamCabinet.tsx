@@ -20,6 +20,12 @@ import {
 
 /** Максимум игроков в составе команды (фиксированный размер — честное начисление). */
 const ROSTER_LIMIT = 10
+
+/** Потолок длины текстового ответа. Совпадает с серверным check-ограничением
+ *  answers_text_len (migration_hardening_3.sql): без клиентского лимита команда
+ *  упёрлась бы в отказ базы и увидела бы «Ответ не отправился, проверьте соединение».
+ *  Величина с запасом: самый длинный реальный ответ в базе — около 17 000 символов. */
+const ANSWER_MAX = 50000
 import { rankTier, rankPercent, DEADLINE, diffBadge, teamAvatar, basename } from '../lib/ui'
 import { teamTotal } from '../lib/scoring'
 import { playPing } from '../lib/ping'
@@ -752,9 +758,20 @@ export default function TeamCabinet() {
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value)}
                   rows={5}
+                  maxLength={ANSWER_MAX}
                   placeholder="Впишите решение по кейсам или прикрепите заполненный файл…"
                   className="field mt-3 w-full resize-none p-4 text-sm outline-none"
                 />
+                {/* Счётчик появляется только на подходе к потолку: у обычного ответа
+                    (самый длинный реальный — около 17 тысяч) его не видно вовсе, а тот,
+                    кто вставил лишнее, узнаёт об этом ДО отправки, а не из отказа сервера. */}
+                {answer.length > ANSWER_MAX * 0.9 && (
+                  <p className="mt-1.5 text-xs font-semibold text-ink-soft" role="status">
+                    {answer.length >= ANSWER_MAX
+                      ? 'Достигнут предел длины ответа. Остальное лучше приложить файлом.'
+                      : `Осталось ${(ANSWER_MAX - answer.length).toLocaleString('ru')} символов из ${ANSWER_MAX.toLocaleString('ru')}.`}
+                  </p>
+                )}
                 <div className="mt-3 flex flex-wrap items-center gap-3">
                   <label className="tap flex max-w-full cursor-pointer items-center gap-2 rounded-2xl sf-2 px-4 py-2.5 text-sm font-bold transition-colors sf-hover focus-within:ring-2 focus-within:ring-alfa">
                     <Upload size={16} className="shrink-0" />
