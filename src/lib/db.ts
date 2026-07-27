@@ -876,8 +876,35 @@ export async function submitAnswer(input: SubmitInput): Promise<{ fileUploaded: 
  *  (тот лежит в `<teamId>/<gameId>/<имя>` без подпапки feedback).
  *  Возвращает { path, name } при успехе или null — вызывающий (saveAll) при null не
  *  затирает баллы и просит повторить, чтобы файл не потерялся молча. */
-export async function uploadFeedbackFile(teamId: string, gameId: string, file: File): Promise<{ path: string; name: string } | null> {
-  if (!isSupabaseConfigured) return { path: `mock/${teamId}/${gameId}/feedback/${file.name}`, name: file.name }
+export type FeedbackUpload =
+  | { ok: true; path: string; name: string }
+  | { ok: false; reason: string }
+
+/** Переводит ошибку Storage в понятную человеку причину. Раньше любая ошибка
+ *  схлопывалась в «попробуйте ещё раз» — и было не понять, дело в размере файла,
+ *  в правах или в том, что корпоративная сеть режет загрузку. */
+function describeUploadError(err: unknown, file: File): string {
+  const e = err as { message?: string; statusCode?: string | number; status?: number } | null
+  const msg = String(e?.message ?? '')
+  const code = Number(e?.statusCode ?? e?.status ?? 0)
+  const mb = (file.size / 1024 / 1024).toFixed(1)
+  if (code === 413 || /too large|exceeded the maximum|payload/i.test(msg)) {
+    return `файл слишком большой (${mb} МБ). Сожмите его или разбейте на части`
+  }
+  if (code === 403 || /row-level security|unauthorized|jwt/i.test(msg)) {
+    return 'сервер отклонил загрузку по правам. Выйдите и зайдите в админку заново'
+  }
+  if (code === 400 && /invalid key|key/i.test(msg)) {
+    return 'недопустимое имя файла — переименуйте его латиницей и попробуйте снова'
+  }
+  if (/failed to fetch|networkerror|load failed|timeout|aborted/i.test(msg)) {
+    return 'сеть прервала загрузку. На рабочем компьютере это частое — попробуйте с телефона или из дома'
+  }
+  return msg ? `ответ сервера: ${msg.slice(0, 120)}` : 'причина неизвестна'
+}
+
+export async function uploadFeedbackFile(teamId: string, gameId: string, file: File): Promise<FeedbackUpload> {
+  if (!isSupabaseConfigured) return { ok: true, path: `mock/${teamId}/${gameId}/feedback/${file.name}`, name: file.name }
   const sb = requireClient()
   // Имя объекта транслитерируем в ASCII (Storage отклоняет кириллические ключи, 400),
   // а исходное имя вернём отдельно — его покажем команде и подставим при скачивании.
@@ -887,8 +914,13 @@ export async function uploadFeedbackFile(teamId: string, gameId: string, file: F
     upsert: true,
     contentType: file.type || undefined,
   })
-  if (error) return null
-  return { path, name: file.name }
+  if (error) {
+    // Полный объект — в консоль: по скриншоту из админки видно только текст, а тут
+    // остаётся статус и тело ответа, если понадобится разбираться дальше.
+    console.error('Загрузка файла ОС не удалась:', { path, size: file.size, type: file.type, error })
+    return { ok: false, reason: describeUploadError(error, file) }
+  }
+  return { ok: true, path, name: file.name }
 }
 
 /** Ссылка (подписанная, на 10 минут) для скачивания файла ответа из бакета 'answers'. */

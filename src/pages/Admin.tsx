@@ -339,8 +339,10 @@ export default function Admin() {
         const g = grades[t.id]
         if (g.submitted && g.pendingFile) {
           const up = await uploadFeedbackFile(t.id, gameId, g.pendingFile)
-          if (!up) {
-            setSaveError(`Не удалось загрузить файл обратной связи для команды «${t.name}». Ничего не сохранено — попробуйте ещё раз.`)
+          if (!up.ok) {
+            // Показываем НАСТОЯЩУЮ причину: «попробуйте ещё раз» ничего не давало —
+            // тренер не знал, дело в размере файла, в правах или в корпоративной сети.
+            setSaveError(`Файл обратной связи для «${t.name}» не загрузился — ${up.reason}. Баллы не сохранены: уберите файл или повторите.`)
             return
           }
           resolved[t.id] = { feedbackFile: up.path, feedbackFileName: up.name }
