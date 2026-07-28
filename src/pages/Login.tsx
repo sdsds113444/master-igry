@@ -63,8 +63,10 @@ export default function Login() {
       <Background />
       <ThemeToggle className="fixed right-4 top-4 z-10" />
       <div className="glass-strong w-full max-w-4xl overflow-hidden rounded-glass md:grid md:grid-cols-[1.05fr_1fr]">
-        {/* Сцена с маскотом */}
-        <div className="relative hidden min-h-[420px] md:block">
+        {/* Сцена с маскотом. Видима по умолчанию и прячется на узком экране, а не наоборот:
+            если медиазапросы до браузера не доедут (обрезанный CSS, старый движок), пропадёт
+            правило «спрятать», а не «показать» — контент останется на месте. */}
+        <div className="relative block min-h-[420px] max-md:hidden">
           <img
             src="/koya/koya-sit-crop.webp"
             alt="Маскот КОЯ"

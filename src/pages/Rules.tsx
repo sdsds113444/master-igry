@@ -28,7 +28,7 @@ export default function Rules() {
               Всё, что нужно знать команде: формат, ритм недели, как считаются баллы и что можно выиграть.
             </p>
           </div>
-          <div className="relative hidden min-h-[200px] self-stretch overflow-hidden rounded-glass md:m-3 md:block">
+          <div className="relative block min-h-[200px] self-stretch overflow-hidden rounded-glass md:m-3 max-md:hidden">
             <img src="/koya/koya-sit-crop.webp" alt="КОЯ" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: 'center 20%' }} />
           </div>
         </div>
