@@ -28,6 +28,7 @@ const ROSTER_LIMIT = 10
 const ANSWER_MAX = 50000
 import { rankTier, rankPercent, DEADLINE, diffBadge, teamAvatar, basename } from '../lib/ui'
 import { teamTotal } from '../lib/scoring'
+import { newFeedbackGames, getSeenFeedback, markFeedbackSeen, hasWrittenFeedback } from '../lib/feedbackSeen'
 import { playPing } from '../lib/ping'
 import VideoModal from '../components/VideoModal'
 import MentorChatModal from '../components/MentorChatModal'
@@ -122,6 +123,10 @@ export default function TeamCabinet() {
   const [openCases, setOpenCases] = useState<Set<string>>(new Set()) // раскрытые кейсы (аккордеон)
   const [zoomImage, setZoomImage] = useState<string | null>(null) // скриншот кейса на весь экран
   const [scores, setScores] = useState<Record<string, TeamScore>>({})
+  // Слепки уже показанной обратной связи. Читаем один раз при входе: иначе отметка
+  // «просмотрено» гасила бы плашку в тот же рендер, и команда её просто не заметила бы.
+  const [seenFeedback, setSeenFeedback] = useState<Record<string, string>>({})
+  const feedbackRef = useRef<HTMLDivElement | null>(null)
 
   const [answer, setAnswer] = useState('')
   const [sent, setSent] = useState(false)
@@ -182,6 +187,9 @@ export default function TeamCabinet() {
         loadedGameId.current = cur?.id ?? null
         setRoster(r)
         setScores(s)
+        // Слепок «что уже видели» снимаем ДО показа, один раз за вход: дальше он не
+        // обновляется сам, иначе плашка о новой проверке исчезла бы до того, как её прочитали.
+        setSeenFeedback(getSeenFeedback(team.id))
         setCases(c)
         if (sub) { setAnswer(sub.answer); setFileAttached(sub.fileName); setSent(isRealSubmission(sub.answer, sub.fileName)) }
         // sub.filePath — путь к ранее загруженному файлу; новый файл (file) заменит его
@@ -293,6 +301,27 @@ export default function TeamCabinet() {
   const tier = rankTier(rank, teamsCount)
   const rankProgress = rankPercent(rank, teamsCount)
   const seasonStarted = games.some((g) => g.status === 'current' || g.status === 'done')
+
+  // Игры, по которым тренер проверил работу, а команда этого ещё не видела.
+  // Считаем ТОЛЬКО по опубликованным играм: блок с ОС ниже тоже прячет locked, иначе
+  // плашка назвала бы неопубликованную неделю (спойлер) и увела бы в блок, где её нет.
+  const visibleGames = games.filter((g) => g.status !== 'locked')
+  const freshFeedback = newFeedbackGames(scores, seenFeedback, visibleGames.map((g) => g.id))
+  const freshSet = new Set(freshFeedback)
+  // Обещать «обратную связь» можно, только если она правда есть словами или файлом.
+  const freshHasText = freshFeedback.some((id) => scores[id] && hasWrittenFeedback(scores[id]))
+
+  /** «Посмотреть»: доводим до блока с ОС. Отметку «просмотрено» сохраняем сразу, но
+   *  с экрана плашку и подсветку НЕ убираем до следующего захода — намеренно:
+   *  плашка стоит выше блока, и её исчезновение сдвинуло бы содержимое вверх ровно на
+   *  свою высоту, утащив заголовок под липкую шапку. Заодно подсветка работает якорем
+   *  «вот что новое», пока команда читает. При следующем входе всё уже чисто.
+   *  Отметку ставим только по явному действию: гасить молча по факту загрузки нельзя,
+   *  иначе команда узнает о проверке один раз и легко её пропустит. */
+  function openFeedback() {
+    if (me) markFeedbackSeen(me.id, scores)
+    feedbackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   async function addPlayer(e: React.FormEvent) {
     e.preventDefault()
@@ -526,6 +555,35 @@ export default function TeamCabinet() {
         title={videoTitle}
         src={videoSrc}
       />
+      {/* Плашка «работу проверили». Стоит выше шапки: блок с ОС живёт в боковой колонке
+          и внизу, команда его просто не замечала и не знала, что проверка вообще была. */}
+      {freshFeedback.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          role="status"
+          className="flex flex-wrap items-center gap-3 rounded-glass border-2 border-alfa/40 bg-alfa/10 p-4"
+        >
+          <CheckCircle2 size={22} className="shrink-0 text-alfa" />
+          <div className="mr-auto min-w-0">
+            <div className="text-sm font-extrabold">
+              {freshFeedback.length === 1
+                ? (freshHasText ? 'Ваш ответ проверен — тренер оставил обратную связь' : 'Ваш ответ проверен, оценка выставлена')
+                : `Проверено работ: ${freshFeedback.length}${freshHasText ? '. Тренер оставил обратную связь' : ''}`}
+            </div>
+            <div className="mt-0.5 text-xs text-ink-soft">
+              {visibleGames.filter((g) => freshSet.has(g.id)).map((g) => g.title).join(' · ')}
+            </div>
+          </div>
+          <button
+            onClick={openFeedback}
+            className="btn-alfa shrink-0 rounded-2xl px-4 py-2 text-sm font-bold"
+          >
+            Посмотреть
+          </button>
+        </motion.div>
+      )}
+
       {/* Шапка команды */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
@@ -1007,9 +1065,23 @@ export default function TeamCabinet() {
             </p>
           </div>
 
-          {/* Баллы + обратная связь тренера */}
-          <div className="glass rounded-glass p-5">
-            <h3 className="mb-3 font-display text-lg font-bold">Баллы и обратная связь</h3>
+          {/* Баллы + обратная связь тренера.
+              scroll-mt-24: липкая шапка занимает ~70px, при меньшем отступе заголовок
+              с пометкой «новое» уезжает под неё после прокрутки.
+              outline, а не ring: у .glass своя box-shadow, объявленная вне слоёв
+              Tailwind, и она перебивала кольцо — подсветки просто не было видно. */}
+          <div
+            ref={feedbackRef}
+            className={`glass rounded-glass p-5 scroll-mt-24 ${freshFeedback.length > 0 ? 'outline outline-2 outline-alfa/50' : ''}`}
+          >
+            <h3 className="mb-3 flex items-center gap-2 font-display text-lg font-bold">
+              Баллы и обратная связь
+              {freshFeedback.length > 0 && (
+                <span className="rounded-full bg-alfa px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-white">
+                  новое
+                </span>
+              )}
+            </h3>
             <div className="space-y-2.5">
               {games.filter((g) => g.status !== 'locked' && scores[g.id]).length === 0 && (
                 <div className="rounded-2xl sf-1 p-4 text-center text-xs text-ink-soft">
@@ -1021,12 +1093,16 @@ export default function TeamCabinet() {
                 if (!s) return null
                 const superVok = s.superBonusVok ?? 0
                 const sum = teamTotal({ cases: s.cases, bonus: s.bonus, superBonusVok: superVok })
+                const isFresh = freshSet.has(g.id)
                 return (
-                  <div key={g.id} className="rounded-2xl sf-1 p-3">
+                  <div key={g.id} className={`rounded-2xl sf-1 p-3 ${isFresh ? 'ring-1 ring-alfa/40' : ''}`}>
                     <div className="flex items-center gap-3">
                       <Icon3D name={GAME_ICON_3D[g.id]} fallback={g.emoji} className="h-8 w-8 shrink-0 object-contain drop-shadow-sm" />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-bold">{g.title}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate text-sm font-bold">{g.title}</span>
+                          {isFresh && <span className="h-2 w-2 shrink-0 rounded-full bg-alfa" aria-label="новая обратная связь" />}
+                        </div>
                         <div className="text-xs font-semibold text-ink-soft">
                           {/* «из 3» — чтобы шкала была очевидна: оценка за кейсы одна на
                               всю неделю, а не по баллу за каждый из 10 кейсов. */}
