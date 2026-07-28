@@ -26,6 +26,16 @@ const ROSTER_LIMIT = 10
  *  упёрлась бы в отказ базы и увидела бы «Ответ не отправился, проверьте соединение».
  *  Величина с запасом: самый длинный реальный ответ в базе — около 17 000 символов. */
 const ANSWER_MAX = 50000
+
+/** Расшифровка шкалы оценки за кейсы — дословно та же, что в правилах и в админке.
+ *  Держим тремя копиями сознательно: правила и админка — отдельные экраны, а здесь
+ *  подпись должна быть под рукой в момент, когда команда смотрит свой балл. */
+const CASES_MEANING: Record<number, string> = {
+  0: 'не сдали',
+  1: 'более 3 ошибок',
+  2: 'менее 3 ошибок',
+  3: 'без ошибок',
+}
 import { rankTier, rankPercent, DEADLINE, diffBadge, teamAvatar, basename } from '../lib/ui'
 import { teamTotal } from '../lib/scoring'
 import { newFeedbackGames, getSeenFeedback, markFeedbackSeen, hasWrittenFeedback } from '../lib/feedbackSeen'
@@ -1103,10 +1113,12 @@ export default function TeamCabinet() {
                           <span className="truncate text-sm font-bold">{g.title}</span>
                           {isFresh && <span className="h-2 w-2 shrink-0 rounded-full bg-alfa" aria-label="новая обратная связь" />}
                         </div>
+                        {/* Одного «кейсы 2 из 3» мало: читается как «решили 2 кейса из 3»,
+                            хотя кейсов в неделе десять, а это оценка качества по шкале.
+                            Поэтому пишем «оценка» и сразу расшифровку — ту же, что в правилах. */}
                         <div className="text-xs font-semibold text-ink-soft">
-                          {/* «из 3» — чтобы шкала была очевидна: оценка за кейсы одна на
-                              всю неделю, а не по баллу за каждый из 10 кейсов. */}
-                          кейсы {s.cases} из 3
+                          оценка за кейсы: {s.cases} из 3
+                          {CASES_MEANING[s.cases] && ` — ${CASES_MEANING[s.cases]}`}
                           {s.bonus > 0 && ` · бонус +${s.bonus}`}
                           {superVok > 0 && ` · супер VOC +${superVok}`}
                         </div>
