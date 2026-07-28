@@ -122,10 +122,7 @@ export default function Admin() {
 
   // Оценки и ответы по выбранной игре. Строится из уже загруженного списка команд.
   useEffect(() => {
-    // Грузить нечего — но снять loading обязаны: иначе при пустом списке команд (или пока не
-    // выбрана игра) панель навсегда залипала на спиннере, потому что первый эффект в успешной
-    // ветке loading не трогает, а сюда мы выходили раньше времени.
-    if (!gameId || teams.length === 0) { setLoading(false); return }
+    if (!gameId || teams.length === 0) return
     let cancelled = false
     async function load() {
       setLoading(true)
@@ -501,17 +498,9 @@ export default function Admin() {
           <div className="grid h-40 place-items-center text-ink-soft" role="status" aria-live="polite">
             <Loader2 className="animate-spin" /><span className="sr-only">Загружаю команды…</span>
           </div>
-        ) : teams.length === 0 ? (
-          // Раньше пустой список команд рисовал пустоту: «данные не пришли» и «вёрстка поехала»
-          // выглядели для тренера одинаково, что стоило часа диагностики вживую.
-          <div className="grid h-40 place-items-center px-5 text-center text-sm font-semibold text-ink-soft">
-            Команды не загрузились. Обновите страницу — если не поможет, войдите заново.
-          </div>
         ) : (
           <>
-          {/* Таблица видима по умолчанию и прячется на узком экране, а не наоборот: при потере
-              медиазапросов пропадёт правило «спрятать», и список останется на месте. */}
-          <div className="block max-h-[540px] overflow-auto max-lg:hidden">
+          <div className="hidden max-h-[540px] overflow-auto lg:block">
             <table className="w-full min-w-[900px] text-sm">
               <thead className="sticky top-0 z-10 sf-3 backdrop-blur">
                 <tr className="text-left text-xs font-semibold uppercase tracking-wide text-ink-soft">

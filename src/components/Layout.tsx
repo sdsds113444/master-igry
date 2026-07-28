@@ -158,7 +158,7 @@ export default function Layout() {
           <div className="flex items-center gap-2 pr-1">
             <ThemeToggle />
             {session && session.role !== 'admin' && avatar && (
-              <div className="flex items-center gap-2 rounded-full sf-1 px-3 py-1.5 max-sm:hidden">
+              <div className="hidden items-center gap-2 rounded-full sf-1 px-3 py-1.5 sm:flex">
                 <span
                   className="grid h-7 w-7 place-items-center rounded-full text-xs font-extrabold"
                   style={{ background: avatar.bg, color: avatar.fg }}
