@@ -32,8 +32,8 @@ const ANSWER_MAX = 50000
  *  подпись должна быть под рукой в момент, когда команда смотрит свой балл. */
 const CASES_MEANING: Record<number, string> = {
   0: 'не сдали',
-  1: 'более 3 ошибок',
-  2: 'менее 3 ошибок',
+  1: '4 и более ошибок',
+  2: '1–3 ошибки',
   3: 'без ошибок',
 }
 import { rankTier, rankPercent, DEADLINE, diffBadge, teamAvatar, basename } from '../lib/ui'

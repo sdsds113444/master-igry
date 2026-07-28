@@ -490,7 +490,9 @@ export default function Admin() {
         <div className="flex flex-col gap-1.5 border-b border-black/5 px-5 py-4 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
           <h2 className="font-display text-xl font-bold">Оценивание команд</h2>
           <div className="text-xs font-semibold text-ink-soft">
-            Оценка за кейсы (общая, 0–3): 0 — не сдал · 1 — &gt;3 ошибок · 2 — &lt;3 ошибок · 3 — без ошибок
+            {/* Раньше было «&gt;3» и «&lt;3» — ровно 3 ошибки не попадали никуда, и тренер
+                вручную ставил 1 там, где проверка ставит 2. Границы сведены встык. */}
+            Оценка за кейсы (общая, 0–3): 0 — не сдали · 1 — 4 и более ошибок · 2 — 1–3 ошибки · 3 — без ошибок
           </div>
         </div>
 
