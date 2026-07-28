@@ -30,6 +30,12 @@ const ANSWER_MAX = 50000
 /** Расшифровка шкалы оценки за кейсы — дословно та же, что в правилах и в админке.
  *  Держим тремя копиями сознательно: правила и админка — отдельные экраны, а здесь
  *  подпись должна быть под рукой в момент, когда команда смотрит свой балл. */
+/** Игры, по которым обратную связь разослали ДО того, как появились уведомления.
+ *  Плашка «ваш ответ проверен» по ним не всплывает: команды свои баллы за эту неделю
+ *  уже видели, и пачка запоздалых оповещений была бы шумом, а не пользой.
+ *  Со следующих игр всё работает штатно — достаточно не добавлять их сюда. */
+const FEEDBACK_NOTICE_SKIP = new Set(['detective'])
+
 const CASES_MEANING: Record<number, string> = {
   0: 'не сдали',
   1: '4 и более ошибок',
@@ -315,8 +321,10 @@ export default function TeamCabinet() {
   // Игры, по которым тренер проверил работу, а команда этого ещё не видела.
   // Считаем ТОЛЬКО по опубликованным играм: блок с ОС ниже тоже прячет locked, иначе
   // плашка назвала бы неопубликованную неделю (спойлер) и увела бы в блок, где её нет.
+  // Плюс исключаем игры из FEEDBACK_NOTICE_SKIP — см. комментарий у константы.
   const visibleGames = games.filter((g) => g.status !== 'locked')
-  const freshFeedback = newFeedbackGames(scores, seenFeedback, visibleGames.map((g) => g.id))
+  const noticeGames = visibleGames.filter((g) => !FEEDBACK_NOTICE_SKIP.has(g.id))
+  const freshFeedback = newFeedbackGames(scores, seenFeedback, noticeGames.map((g) => g.id))
   const freshSet = new Set(freshFeedback)
   // Обещать «обратную связь» можно, только если она правда есть словами или файлом.
   const freshHasText = freshFeedback.some((id) => scores[id] && hasWrittenFeedback(scores[id]))
