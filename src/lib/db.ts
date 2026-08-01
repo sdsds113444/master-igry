@@ -125,6 +125,13 @@ export async function reconcileSession(): Promise<boolean> {
     await signOut()
     return true
   }
+  // Чиним кэш mi.uid по живой сессии. Раньше он писался ТОЛЬКО в момент ввода кода, а
+  // сессия живёт бессрочно — команда вводит код один раз за сезон. У всех, кто вошёл до
+  // деплоя с user_id, кэш навсегда оставался пустым, хотя анонимная сессия жива и сервер
+  // честно проставляет user_id новым сообщениям. Последствия: карандаш правки не появлялся
+  // никогда, а свои реакции не считались своими — повторный клик уходил на INSERT, ловил
+  // конфликт уникальности и молча гас, то есть реакцию нельзя было снять до конца сезона.
+  setMyUid(data.session.user.id)
   return false
 }
 
@@ -604,8 +611,13 @@ export async function toggleReaction(
   }
   const sb = requireClient()
   if (mine) {
+    // Без uid запрос уходил как user_id=eq. — Postgres падает на приведении пустой строки
+    // к uuid (22P02), клиент получает 400 вместо удаления, реакция «мигает» и остаётся.
+    // Явная ошибка честнее: вызывающий код откатит оптимистичный флаг с понятной причиной.
+    const uid = getMyUid()
+    if (!uid) throw new Error('Нет активной сессии — не удалось снять реакцию.')
     const { error } = await sb.from('message_reactions').delete()
-      .eq('message_id', messageId).eq('emoji', emoji).eq('user_id', getMyUid() ?? '')
+      .eq('message_id', messageId).eq('emoji', emoji).eq('user_id', uid)
     throwOn(error)
   } else {
     // insert — team_id/channel/user_id подставляет серверный триггер, отправлять их не нужно.
@@ -748,7 +760,12 @@ export async function getMentorLatestFromTrainer(teamId: string): Promise<number
 // =====================================================================
 // КЕЙСЫ ИГРЫ
 // =====================================================================
-export async function getCases(gameId: string): Promise<CaseItem[]> {
+/** Трек кейсов: 'fl' — физлица (первый поток), 'ul' — юрлица и эквайринг (второй поток).
+ *  В таблице cases уникальность задана как (game_id, ord, track), то есть ord уникален
+ *  только ВНУТРИ трека. */
+export type CaseTrack = 'fl' | 'ul'
+
+export async function getCases(gameId: string, track: CaseTrack = 'fl'): Promise<CaseItem[]> {
   if (!isSupabaseConfigured) {
     // Ленивый импорт: файл с 73 кейсами (~42 КБ) не попадает в главный бандл,
     // а подгружается только в демо-режиме, когда реально нужен.
@@ -756,7 +773,15 @@ export async function getCases(gameId: string): Promise<CaseItem[]> {
     return GAME_CASES[gameId] ?? []
   }
   const sb = requireClient()
-  const { data, error } = await sb.from('cases').select('id, title, difficulty, body, image_url').eq('game_id', gameId).order('ord')
+  // Фильтр по треку обязателен: заготовленный supabase/cases-ul.sql добавляет для тех же
+  // игр второй комплект кейсов с теми же ord. Без фильтра команда получила бы 24 кейса
+  // вместо 12, с задвоенной нумерацией, а кейсы про валютный контроль и эквайринг юрлиц
+  // утекли бы физлицам. Сортировка по id вторым ключом — чтобы порядок внутри одинаковых
+  // ord был детерминированным, а не случайным от запроса к запросу.
+  const { data, error } = await sb.from('cases')
+    .select('id, title, difficulty, body, image_url')
+    .eq('game_id', gameId).eq('track', track)
+    .order('ord').order('id')
   throwOn(error)
   return (data ?? []).map((c) => ({
     id: c.id as string,

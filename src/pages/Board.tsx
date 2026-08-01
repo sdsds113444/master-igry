@@ -50,6 +50,9 @@ export default function Board() {
   // из локальной сессии, а не отдельным запросом getMyTeam(): все данные уже в rating.
   const myTeamId = getSession()?.teamId ?? null
   const [games, setGames] = useState<Game[] | null>(null)
+  // Зеркало для фонового обновления (его колбэк живёт со старым замыканием).
+  const gamesRef = useRef<Game[] | null>(null)
+  useEffect(() => { gamesRef.current = games }, [games])
   const [feed, setFeed] = useState<FeedRow[] | null>(null)
   const [video, setVideo] = useState<{ title: string; src: string } | null>(null)
   const [error, setError] = useState(false)
@@ -85,7 +88,12 @@ export default function Board() {
       refreshing = true
       try {
         const [r, gs, fd] = await Promise.all([listTeamsRating(), getGames(), listFeed()])
-        setRating(r); setGames(gs); setFeed(fd)
+        setRating(r); setFeed(fd)
+        // Пустой список игр БЕЗ ошибки = не смогли прочитать (протухла анонимная сессия,
+        // RLS отдаёт 0 строк молча), а не «игр нет». Рейтинг при этом продолжает приходить,
+        // поэтому раньше доска на ровном месте подменялась экраном «Игры сезона ещё не
+        // настроены» — команда решала, что неделю отменили. Пустой снимок не применяем.
+        if (gs.length > 0 || (gamesRef.current?.length ?? 0) === 0) setGames(gs)
         setError(false) // сеть восстановилась — гасим экран ошибки первичной загрузки
       } catch {
         /* тихо: это фоновое обновление, не первичная загрузка */
