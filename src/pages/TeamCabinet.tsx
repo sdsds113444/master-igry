@@ -123,10 +123,6 @@ export default function TeamCabinet() {
   const [mentorUnread, setMentorUnread] = useState(false) // «пипочка»: новый ответ тренера
 
   const [games, setGames] = useState<Game[]>([])
-  // Зеркало для фонового обновления: его колбэк живёт со старым замыканием и не увидел бы
-  // текущий список игр, а он нужен, чтобы отличить «игр правда нет» от «не смогли прочитать».
-  const gamesRef = useRef<Game[]>([])
-  useEffect(() => { gamesRef.current = games }, [games])
   const [current, setCurrent] = useState<Game | null>(null)
   const [cases, setCases] = useState<CaseItem[]>([])
   const [openCases, setOpenCases] = useState<Set<string>>(new Set()) // раскрытые кейсы (аккордеон)
@@ -258,12 +254,6 @@ export default function TeamCabinet() {
       refreshing = true
       try {
         const [rating, s, gs] = await Promise.all([listTeamsRating(), getScores(me!.id), getGames()])
-        // Пустой список игр БЕЗ ошибки = не смогли прочитать (протухла анонимная сессия,
-        // и RLS молча отдала 0 строк), а не «игр нет». Принять это за правду значит
-        // обнулить экран: пропадает задание, кейсы и — главное — набранный, но ещё не
-        // отправленный ответ (setAnswer('') ниже). Капитан терял 30 минут работы на ровном
-        // месте. В админке такой снимок уже отбрасывается, здесь защиты не было.
-        if (gs.length === 0 && gamesRef.current.length > 0) return
         const mine = rating.find((x) => x.id === me!.id)
         setRank(mine?.rank ?? 1)
         setTotal(mine?.total ?? 0)
@@ -286,10 +276,6 @@ export default function TeamCabinet() {
           if (sub) { setAnswer(sub.answer); setFileAttached(sub.fileName); setSent(isRealSubmission(sub.answer, sub.fileName)); setSaved({ answer: sub.answer, fileName: sub.fileName }) }
           else { setAnswer(''); setFileAttached(null); setSent(false); setSaved(null) }
           setFile(null)
-          // Ошибка отправки относится к КОНКРЕТНОЙ игре и вместе с ней должна обнуляться.
-          // Иначе красная надпись «файл не прикрепился» с прошлой недели висела под чистой
-          // формой новой игры, к которой команда ещё не приступала.
-          setSendError('')
         }
       } catch { /* фоновое обновление — тихо */ } finally { refreshing = false }
     }
@@ -383,15 +369,13 @@ export default function TeamCabinet() {
 
   async function removePlayer(member: RosterMember) {
     if (!me) return
+    const prev = roster
     setRosterError('')
     setRoster((r) => r.filter((p) => p.id !== member.id))
     try {
       await dbRemovePlayer(me.id, member.id)
     } catch {
-      // Откат ТОЧЕЧНЫЙ, а не снимком всего состава: капитан чистит список подряд, и если
-      // запрос по первому игроку оборвался, а по второму прошёл, восстановление снимка
-      // воскресило бы обоих — включая того, кого в базе уже нет.
-      setRoster((r) => (r.some((p) => p.id === member.id) ? r : [...r, member]))
+      setRoster(prev) // откат: возвращаем игрока в список
       setRosterError('Не удалось убрать игрока — попробуйте ещё раз.')
     }
   }
@@ -418,30 +402,27 @@ export default function TeamCabinet() {
       setRosterError('Игрок с таким именем уже в составе.')
       return
     }
+    const prev = roster
     setRosterError('')
     setRoster((r) => r.map((p) => (p.id === member.id ? { ...p, name } : p)))
     cancelEdit()
     try {
       await dbRenamePlayer(me.id, member.id, name)
     } catch {
-      // Возвращаем прежнее имя ТОЛЬКО этой строке (снимок всего состава откатил бы и
-      // соседние правки, успевшие сохраниться).
-      setRoster((r) => r.map((p) => (p.id === member.id ? { ...p, name: member.name } : p)))
+      setRoster(prev) // откат: возвращаем прежнее имя
       setRosterError('Не удалось изменить имя — попробуйте ещё раз.')
     }
   }
 
   async function makeCaptain(member: RosterMember) {
     if (!me || member.isCaptain) return
-    const prevCaptainId = roster.find((p) => p.isCaptain)?.id ?? null
+    const prev = roster
     setRosterError('')
     setRoster((r) => r.map((p) => ({ ...p, isCaptain: p.id === member.id })))
     try {
       await dbSetCaptain(me.id, member.id)
     } catch {
-      // Откатываем только флаг капитана, не весь состав: параллельные правки имён и
-      // удаления, успевшие сохраниться, не должны отменяться заодно.
-      setRoster((r) => r.map((p) => ({ ...p, isCaptain: p.id === prevCaptainId })))
+      setRoster(prev) // откат
       setRosterError('Не удалось назначить капитана — попробуйте ещё раз.')
     }
   }
@@ -810,11 +791,7 @@ export default function TeamCabinet() {
                   <Clock size={18} className="mt-0.5 shrink-0" />
                   <span>
                     <b className="text-ink">Приём ответов по этому заданию закрыт.</b> Дедлайн прошёл
-                    {/* timeZone обязателен: без него время печатается в зоне устройства, а
-                        подпись «МСК» дописывается всегда. В Барнауле (UTC+7, 17 команд из 29)
-                        дедлайн 13:00 МСК показывался как «17:00 МСК» — и противоречил шапке
-                        этого же экрана «Дедлайн: пятница, 13:00 МСК». */}
-                    {current?.deadline_at ? ` (${new Date(current.deadline_at).toLocaleString('ru', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' })} МСК)` : ''}.
+                    {current?.deadline_at ? ` (${new Date(current.deadline_at).toLocaleString('ru', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} МСК)` : ''}.
                     {/* Только серверная правда: saved заполняется исключительно из getSubmission.
                         По answer/fileAttached судить нельзя — это редактируемый черновик, и
                         набранный, но НЕ отправленный текст выдавался бы за сданный. */}

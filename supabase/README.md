@@ -22,18 +22,6 @@
 14. `migration_prod_sync.sql` — досинхронизация репо с боем (лимит состава).
 15. `migration_message_edit.sql` — **редактирование сообщений в чате**: `messages.user_id`,
     `messages.edited_at`, актуальная версия `messages_set_sender`, RPC `edit_message`.
-16. `migration_hardening_3.sql` — лимиты длины (`answers.text` ≤ 50000, ФИО состава),
-    `revoke execute get_rating from anon`, **`current_team_id` с проверкой `teams.is_active`**.
-    Раньше файла не было в этом списке: восстановление базы по README вернуло бы
-    `current_team_id` без учёта `is_active`, и отключённая команда мгновенно вернула бы
-    доступ к кабинету, чату и праву писать ответы.
-17. `migration_publish_deadline.sql` — **побеждающая версия `publish_game`** (авто-дедлайн
-    «ближайшая пятница 13:00 МСК» + текст дедлайна из самой игры). Применять последней.
-18. `migration_storage_window.sql` — Storage: команда пишет только свои ответы и только
-    пока открыт приём; подпапка `feedback` (разбор от тренера) ей недоступна.
-19. `migration_cases_difficulty_not_null.sql` — `cases.difficulty` становится `NOT NULL`
-    (в `migration_review_fixes.sql` пункт A4 был обёрнут в «exception when others then null»
-    и молча не применился).
 
 ⚠️ `migration_message_edit.sql` применять **после** `migration_hardening.sql`: тот
 переопределяет `messages_set_sender()` в версии без `user_id`. Актуальная версия
@@ -44,15 +32,8 @@
 - **`redeem_code`** → `migration_login_fixes.sql` (последняя по порядку; включает анти-брутфорс из `migration_hardening.sql` + регистронезависимость).
   Опциональное усиление (троттлинг по коду) — в `migration_hardening_optional.sql`.
 - **`get_rating`** → `migration_vok.sql` (суммирует оба супер-бонуса; идентична версии в `migration.sql`).
-- **`publish_game`** → `migration_publish_deadline.sql`. Версии в `migration_board.sql`,
-  `migration_review_fixes.sql` и `migration_review_fixes_applied_2026-07-10.sql` **устарели**:
-  в них нет авто-дедлайна, и повторный прогон через `create or replace` откатил бы прод —
-  у опубликованной игры `deadline_at` остался бы NULL, а политика `answers_write` пускает
-  запись при `deadline_at is null`, то есть приём ответов не закрылся бы никогда.
-- **`is_admin`** → `migration.sql`.
-- **`current_team_id`** → `migration_hardening_3.sql` (с проверкой `teams.is_active`).
-  Версия в `migration.sql` устарела: она отдаёт `team_id` по `team_sessions` без учёта
-  `is_active`, поэтому отключение скомпрометированной команды переставало работать.
+- **`publish_game`** → применена ad-hoc версия из `migration_review_fixes.sql` (A1) + дедлайн из `games.deadline_at`.
+- **`is_admin` / `current_team_id`** → `migration.sql`.
 - **`messages_set_sender`** → `migration_message_edit.sql` (проставляет `user_id`; версия в `migration_hardening.sql` его не знает).
 
 ## Опционально (применять вручную, меняет логику входа/политики)

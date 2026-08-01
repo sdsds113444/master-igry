@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { teamTotal, gradeTotal, scoreWrite, assignRanks, sameScoreFields, BONUS_POINTS, SUPER_BONUS_VOK_POINTS } from './scoring'
+import { teamTotal, gradeTotal, scoreWrite, assignRanks, BONUS_POINTS, SUPER_BONUS_VOK_POINTS } from './scoring'
 
 describe('assignRanks (места при равных баллах)', () => {
   it('равные суммы делят одно место, следующее — со сдвигом', () => {
@@ -80,41 +80,5 @@ describe('gradeTotal (граничные комбинации с cases=0)', () =
   })
   it('обе галочки → 4', () => {
     expect(gradeTotal({ submitted: true, cases: 0, bonus: true, superBonusVok: true })).toBe(4)
-  })
-})
-
-describe('sameScoreFields — не терять правку, сделанную во время сохранения', () => {
-  const base = {
-    submitted: true, cases: 2, bonus: false, vok: 0, superBonusVok: false,
-    feedback: '', feedbackFile: null, feedbackFileName: null,
-  }
-
-  it('одинаковые строки совпадают', () => {
-    expect(sameScoreFields(base, { ...base })).toBe(true)
-  })
-
-  it('РЕГРЕССИЯ: балл поправили во время записи — совпадения нет, «несохранено» не снимаем', () => {
-    expect(sameScoreFields(base, { ...base, cases: 3 })).toBe(false)
-  })
-
-  it('ловит изменение каждого значимого поля', () => {
-    expect(sameScoreFields(base, { ...base, submitted: false })).toBe(false)
-    expect(sameScoreFields(base, { ...base, bonus: true })).toBe(false)
-    expect(sameScoreFields(base, { ...base, vok: 90 })).toBe(false)
-    expect(sameScoreFields(base, { ...base, superBonusVok: true })).toBe(false)
-    expect(sameScoreFields(base, { ...base, feedback: 'разбор' })).toBe(false)
-    expect(sameScoreFields(base, { ...base, feedbackFile: 'a/b.docx' })).toBe(false)
-    expect(sameScoreFields(base, { ...base, feedbackFileName: 'b.docx' })).toBe(false)
-  })
-
-  it('отсутствие поля и null — одно и то же «файла нет»', () => {
-    const withUndefined = { submitted: true, cases: 2, bonus: false, vok: 0, superBonusVok: false, feedback: '' }
-    expect(sameScoreFields(base, withUndefined)).toBe(true)
-  })
-
-  it('пропавшая строка не считается совпадением', () => {
-    expect(sameScoreFields(base, undefined)).toBe(false)
-    expect(sameScoreFields(undefined, base)).toBe(false)
-    expect(sameScoreFields(undefined, undefined)).toBe(true)
   })
 })

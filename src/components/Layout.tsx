@@ -50,23 +50,14 @@ export default function Layout() {
       } catch { /* тихо: плашка не критична, без неё сайт работает как прежде */ }
     }
     load()
-    // Периодическое обновление — как в Board и TeamCabinet. Без него шапка знала о дедлайне
-    // ровно то, что было на момент монтирования: переходы Доска↔Кабинет↔Правила внутри SPA
-    // Layout не перемонтируют и события focus не дают. В понедельник, когда тренер публикует
-    // новую игру, кабинет открывал форму сдачи своим таймером, а шапка продолжала висеть
-    // «Приём ответов закрыт» от прошлой недели — и капитан решал, что сдавать нельзя.
-    const timer = window.setInterval(load, 4 * 60 * 1000)
     window.addEventListener('focus', load)
-    document.addEventListener('visibilitychange', load)
     // Кабинет сообщает об успешной сдаче — плашка должна погаснуть СРАЗУ. Без этого она
     // висела «Поторопитесь сдать ответ» поверх зелёного «Ответ отправлен», пока человек
     // не переключит вкладку, и капитаны отправляли ответ повторно.
     window.addEventListener(SUBMITTED_EVENT, load)
     return () => {
       stopped = true
-      window.clearInterval(timer)
       window.removeEventListener('focus', load)
-      document.removeEventListener('visibilitychange', load)
       window.removeEventListener(SUBMITTED_EVENT, load)
     }
   }, [teamId, role])

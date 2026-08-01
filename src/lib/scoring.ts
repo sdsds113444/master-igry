@@ -101,38 +101,3 @@ export function scoreWrite(g: GradeFormRow): ScoreWrite {
     feedbackFileName: g.feedbackFileName,
   }
 }
-
-/** Совпадают ли поля, которые реально уходят в scores.
- *
- *  Нужно, чтобы после сохранения снять «несохранено» ТОЛЬКО с тех команд, чьи значения
- *  не изменились, пока шли запросы. Раньше флаг снимался со всех команд батча — и правка,
- *  сделанная во время долгой заливки файла ОС, пропадала молча: в базу уходил старый балл,
- *  кнопка гасла со словом «сохранено», а фоновое обновление возвращало старое значение
- *  на экран. Сравниваем только то, что влияет на запись: pendingFile (ещё не загруженный
- *  файл) и служебные поля формы сюда намеренно не входят. */
-export interface ComparableGrade {
-  submitted: boolean
-  cases: number
-  bonus: boolean
-  vok: number
-  superBonusVok: boolean
-  feedback: string
-  // В состоянии админки поля файла необязательные — сравнение это допускает,
-  // приводя отсутствие и null к одному и тому же «файла нет».
-  feedbackFile?: string | null
-  feedbackFileName?: string | null
-}
-export function sameScoreFields(
-  a: ComparableGrade | undefined,
-  b: ComparableGrade | undefined,
-): boolean {
-  if (!a || !b) return a === b
-  return a.submitted === b.submitted
-    && a.cases === b.cases
-    && a.bonus === b.bonus
-    && a.vok === b.vok
-    && a.superBonusVok === b.superBonusVok
-    && a.feedback === b.feedback
-    && (a.feedbackFile ?? null) === (b.feedbackFile ?? null)
-    && (a.feedbackFileName ?? null) === (b.feedbackFileName ?? null)
-}
