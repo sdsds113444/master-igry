@@ -13,7 +13,7 @@ import MentorChatModal from '../components/MentorChatModal'
 import Dialog from '../components/Dialog'
 import ErrorCard from '../components/ErrorCard'
 import { teamAvatar, basename, downloadName } from '../lib/ui'
-import { gradeTotal, scoreWrite } from '../lib/scoring'
+import { gradeTotal, scoreWrite, sameScoreFields } from '../lib/scoring'
 
 /** Строка оценивания из серверных данных. Общая для первой загрузки и фонового
  *  обновления — иначе они разъезжались в трактовке «сдала».
@@ -25,6 +25,17 @@ function buildGrade(s: GradeRow | undefined, hasAnswer: boolean): Grade {
   return s
     ? { submitted, cases: s.cases, bonus: s.bonus > 0, vok: s.vok, superBonusVok: s.superBonusVok > 0, feedback: s.feedback, feedbackFile: s.feedbackFile, feedbackFileName: s.feedbackFileName, pendingFile: null }
     : { submitted, cases: 0, bonus: false, vok: 0, superBonusVok: false, feedback: '', feedbackFile: null, feedbackFileName: null, pendingFile: null }
+}
+
+/** Реальный ответ команды, а не пустая заготовка.
+ *
+ *  submitAnswer сначала апсертит строку в answers с текстом, и только потом грузит файл.
+ *  Если файл зарубила корпоративная сеть, а текста не было, в базе остаётся строка с
+ *  text='' и file_url=null. Считать её сдачей нельзя: команда попадала в счётчик «N сдали»,
+ *  чекбокс «Сдала» становился нередактируемым (disabled={hasAnswer}), а красная точка
+ *  «на проверку» не загоралась — тренер такую команду просто не догонял, хотя ответа нет. */
+function isRealAnswer(a: { answer: string; filePath: string | null } | undefined): boolean {
+  return !!a && (a.answer.trim().length > 0 || !!a.filePath)
 }
 
 /** Целое число из поля ввода: защита от NaN и дробей, зажим в [0, max]. */
@@ -77,6 +88,14 @@ export default function Admin() {
   const dirtyRef = useRef<Set<string>>(dirtyTeams)
   const savingRef = useRef(false)
   const saveGenRef = useRef(0)          // растёт после каждого успешного сохранения
+  // Зеркало самих оценок. saveAll — обычная функция компонента, её `grades` это снимок
+  // рендера, в котором создан onClick. Между стартом сохранения и записью есть await'ы
+  // (заливка файлов ОС, на банковской сети — десятки секунд), и правка, сделанная в это
+  // окно, уходила в никуда: в базу писался устаревший балл, а команда снималась с
+  // «несохранённых». Кнопка говорила «Баллы сохранены», через минуту фоновое обновление
+  // возвращало на экран старое значение.
+  const gradesRef = useRef<Record<string, Grade>>(grades)
+  useEffect(() => { gradesRef.current = grades }, [grades])
   useEffect(() => { dirtyRef.current = dirtyTeams }, [dirtyTeams])
   useEffect(() => { savingRef.current = saving }, [saving])
   const [chatTeam, setChatTeam] = useState<AdminTeamRow | null>(null)
@@ -109,6 +128,11 @@ export default function Admin() {
       try {
         const [gs, ts] = await Promise.all([getGames(), listAllTeamsAdmin()])
         if (cancelled) return
+        // Пустой ответ БЕЗ ошибки на живой базе значит «не смогли прочитать», а не
+        // «данных нет»: при протухшей сессии is_admin() становится false и RLS молча
+        // отдаёт 0 строк. Раньше это оставляло панель в вечном спиннере без объяснения —
+        // второй эффект выходил по guard'у ДО setLoading(false).
+        if (gs.length === 0 || ts.length === 0) { setLoadError(true); setLoading(false); return }
         setGames(gs)
         setTeams(ts)
         setGameId((cur) => cur || pickCurrentGame(gs)?.id || gs[0]?.id || '')
@@ -122,6 +146,12 @@ export default function Admin() {
 
   // Оценки и ответы по выбранной игре. Строится из уже загруженного списка команд.
   useEffect(() => {
+    // ВАЖНО: тут НЕЛЬЗЯ снимать loading. Эффекты выполняются ПОСЛЕ рендера, поэтому
+    // setLoading(false) здесь открывал окно, в котором teams уже загружены, а grades ещё
+    // пустые — таблица успевала отрисоваться и падала на gradeTotal(undefined).
+    // Вечный спиннер, ради которого это делалось, лечится в ПЕРВОМ эффекте: пустой ответ
+    // там теперь трактуется как ошибка чтения, поэтому «команд нет и загрузка молчит»
+    // больше не наступает.
     if (!gameId || teams.length === 0) return
     let cancelled = false
     async function load() {
@@ -133,8 +163,19 @@ export default function Admin() {
           getScoresForGame(gameId), getAnswersForGame(gameId),
         ])
         if (cancelled) return
+        // Полностью пустой снимок бывает по двум причинам: по игре реально ещё никто не
+        // сдавал (норма для только что опубликованной) ИЛИ умерла admin-сессия и RLS молча
+        // отдаёт 0 строк. Различаем по списку команд: он от игры НЕ зависит, поэтому пустой
+        // ответ по нему означает именно потерю прав. Без этой проверки переключение игры на
+        // протухшем токене рисовало «29 команд не сдали, 0 очков» — и по такому экрану
+        // тренер начинал переоценивать работы руками.
+        if (Object.keys(scores).length === 0 && Object.keys(ans).length === 0) {
+          const check = await listAllTeamsAdmin().catch(() => [])
+          if (cancelled) return
+          if (check.length === 0) { setLoadError(true); return }
+        }
         const init: Record<string, Grade> = {}
-        for (const t of teams) init[t.id] = buildGrade(scores[t.id], !!ans[t.id])
+        for (const t of teams) init[t.id] = buildGrade(scores[t.id], isRealAnswer(ans[t.id]))
         setGrades(init)
         setAnswers(ans)
         setReviewedTeams(new Set(Object.keys(scores))) // у кого уже есть оценка — уже проверены
@@ -187,7 +228,7 @@ export default function Admin() {
           const next = { ...prev }
           for (const t of teams) {
             if (dirtyRef.current.has(t.id)) continue // несохранённый ввод тренера важнее снимка
-            next[t.id] = buildGrade(scores[t.id], !!ans[t.id])
+            next[t.id] = buildGrade(scores[t.id], isRealAnswer(ans[t.id]))
           }
           return next
         })
@@ -278,21 +319,37 @@ export default function Admin() {
   const pendingReview = useMemo(() => {
     const s = new Set<string>()
     for (const tid of Object.keys(answers)) {
-      const a = answers[tid]
-      const real = !!a && (a.answer.trim().length > 0 || !!a.filePath)
-      if (real && !reviewedTeams.has(tid)) s.add(tid)
+      if (isRealAnswer(answers[tid]) && !reviewedTeams.has(tid)) s.add(tid)
     }
     return s
   }, [answers, reviewedTeams])
 
+  // Страховка от «строка есть, оценки ещё нет». Эффекты идут после рендера, поэтому между
+  // появлением команд и построением grades существует кадр, где grades[t.id] === undefined,
+  // а GradeRowDesktop зовёт gradeTotal(g) и падает на чтении g.submitted — именно так
+  // админка легла в проде 01.08.2026. Пока строки не готовы, показываем спиннер: это
+  // не может залипнуть навсегда, потому что эффект либо заполнит grades, либо выставит
+  // loadError (и тогда покажется карточка ошибки, а не таблица).
+  const gradesReady = teams.every((t) => grades[t.id] !== undefined)
+
   const submittedCount = Object.values(grades).filter((g) => g.submitted).length
-  const isPublished = games.find((g) => g.id === gameId)?.status === 'current'
+  const gameStatus = games.find((g) => g.id === gameId)?.status
+  const isPublished = gameStatus === 'current'
+  // Уже сыгранная игра публикуется ПОВТОРНО одним кликом: она снова становится текущей,
+  // а нынешняя неделя схлопывается в done. Дедлайн при этом не пересчитывается (в
+  // publish_game он ставится только если пуст), то есть у вернувшейся игры он в прошлом —
+  // приём закрыт сразу у обеих. Для done кнопка показывала «Выложить задание», потому что
+  // isPublished там false. Публиковать разрешаем только ещё не сыгранные игры.
+  const isReplayed = gameStatus === 'done'
 
   // Стабильная ссылка (useCallback + функциональные setState без внешних зависимостей):
   // нужна, чтобы мемоизированные строки/карточки команд не ре-рендерились все разом
   // на каждый ввод символа — перерисовывается только та команда, чей grade изменился.
   const upd = useCallback((id: string, patch: Partial<Grade>) => {
-    setGrades((g) => ({ ...g, [id]: { ...g[id], ...patch } }))
+    // Зеркало ведём синхронно и делаем его источником правды для saveAll: passive-эффект
+    // отработает уже после коммита, а сохранение может стартовать раньше.
+    gradesRef.current = { ...gradesRef.current, [id]: { ...gradesRef.current[id], ...patch } }
+    setGrades(gradesRef.current)
     setDirtyTeams((s) => { const n = new Set(s); n.add(id); return n }) // помечаем команду изменённой
     // Синхронно, ДО коммита React: фоновое обновление может прочитать ref раньше, чем
     // отработает passive-эффект, и затереть только что введённое значение.
@@ -329,6 +386,10 @@ export default function Admin() {
       // своего устаревшего снимка (тихий lost-update). Маппинг «строка оценивания → очки»
       // вынесен в scoreWrite (scoring.ts) и покрыт тестами.
       const changed = teams.filter((t) => dirtyTeams.has(t.id))
+      // Снимок, который реально уйдёт в базу. Берём из зеркала (актуальное значение на
+      // момент клика), а НЕ из замыкания рендера, и держим его до конца сохранения:
+      // с ним же потом сверяем, не правил ли тренер эти поля, пока шли запросы.
+      const sent = gradesRef.current
 
       // Сперва заливаем новые файлы ОС (по одному). Если хоть один не загрузился —
       // ПРЕРЫВАЕМ всё сохранение и просим повторить: иначе баллы сохранились бы без
@@ -336,7 +397,7 @@ export default function Admin() {
       // ранее сохранённый путь (round-trip через grade state, апсерт его не теряет).
       const resolved: Record<string, { feedbackFile: string | null; feedbackFileName: string | null }> = {}
       for (const t of changed) {
-        const g = grades[t.id]
+        const g = sent[t.id]
         if (g.submitted && g.pendingFile) {
           const up = await uploadFeedbackFile(t.id, gameId, g.pendingFile)
           if (!up.ok) {
@@ -352,7 +413,7 @@ export default function Admin() {
       }
 
       const toWrite = (t: AdminTeamRow) => {
-        const g = grades[t.id]
+        const g = sent[t.id]
         return scoreWrite({
           submitted: g.submitted, cases: g.cases, bonus: g.bonus, vok: g.vok,
           superBonusVok: g.superBonusVok, feedback: g.feedback, ...resolved[t.id],
@@ -366,12 +427,19 @@ export default function Admin() {
       // Залитый файл теперь «сохранённый»: снимаем pendingFile и подставляем итоговый путь
       // (scoreWrite мог обнулить его, если команду сняли со «сдала») — иначе повторное
       // сохранение перезалило бы тот же файл, а UI показывал бы «есть несохранённый».
+      // Команды, которые тренер успел поправить ПОКА шло сохранение: в базу ушло старое
+      // значение, поэтому «несохранено» с них снимать нельзя — иначе правка исчезнет молча.
+      const editedDuringSave = new Set(
+        changed.filter((t) => !sameScoreFields(sent[t.id], gradesRef.current[t.id])).map((t) => t.id),
+      )
       setGrades((prev) => {
         const next = { ...prev }
         for (const t of changed) {
+          if (editedDuringSave.has(t.id)) continue // не трогаем то, что тренер правит прямо сейчас
           const w = toWrite(t)
           next[t.id] = { ...prev[t.id], feedbackFile: w.feedbackFile, feedbackFileName: w.feedbackFileName, pendingFile: null }
         }
+        gradesRef.current = next
         return next
       })
 
@@ -383,14 +451,20 @@ export default function Admin() {
       // оставались только на экране до перезагрузки.
       setDirtyTeams((prev) => {
         const n = new Set(prev)
-        changed.forEach((t) => n.delete(t.id))
+        changed.forEach((t) => { if (!editedDuringSave.has(t.id)) n.delete(t.id) })
         return n
       })
       // Синхронно, чтобы фоновое обновление сразу видело актуальный набор «грязных».
       const nextDirty = new Set(dirtyRef.current)
-      changed.forEach((t) => nextDirty.delete(t.id))
+      changed.forEach((t) => { if (!editedDuringSave.has(t.id)) nextDirty.delete(t.id) })
       dirtyRef.current = nextDirty
-      setSaved(true)
+      // Честный итог: «сохранено» только если сохранили всё, что просили. Если тренер
+      // правил во время записи, кнопка обязана остаться активной, а не гаснуть.
+      if (editedDuringSave.size > 0) {
+        setSaveError('Пока шло сохранение, вы поправили баллы — они ещё не записаны. Нажмите «Сохранить» ещё раз.')
+      } else {
+        setSaved(true)
+      }
       // Снимок, улетевший ДО этого сохранения, теперь устарел — фоновое обновление
       // отбросит его по несовпадению поколения, а не накроет им свежие баллы.
       saveGenRef.current += 1
@@ -415,6 +489,17 @@ export default function Admin() {
                          // следующему запросу — иначе его сбой оставлял бы кнопку
                          // активной и повторный клик задваивал бы запись в ленте.
     } catch {
+      // Исключение НЕ значит, что публикация не прошла: RPC могла дойти до Postgres и
+      // закоммититься, а ответ потеряться на банковской сети или на таймауте прокси.
+      // publish_game не идемпотентна — она безусловно вставляет две записи в ленту, и
+      // повторный клик задваивал бы их у всех команд. Поэтому сначала перечитываем факт.
+      const fresh = await getGames().catch(() => null)
+      if (fresh && fresh.find((x) => x.id === gameId)?.status === 'current') {
+        setGames(fresh)
+        setPublished(true)
+        setPublishing(false)
+        return
+      }
       setSaveError('Не удалось опубликовать задание. Попробуйте ещё раз.')
       setPublishing(false)
       return
@@ -473,14 +558,17 @@ export default function Admin() {
 
           <button
             onClick={publish}
-            disabled={publishing || !gameId || published || isPublished}
+            disabled={publishing || !gameId || published || isPublished || isReplayed}
+            title={isReplayed ? 'Эта игра уже сыграна. Повторная публикация закрыла бы текущую неделю.' : undefined}
             className="btn-alfa ml-auto flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-bold disabled:opacity-60"
           >
             {publishing
               ? <><Loader2 size={16} className="animate-spin" /> Публикую…</>
               : (published || isPublished)
                 ? <><Check size={16} /> Опубликовано на доске</>
-                : <><Megaphone size={16} /> Выложить задание</>}
+                : isReplayed
+                  ? <><Check size={16} /> Игра уже сыграна</>
+                  : <><Megaphone size={16} /> Выложить задание</>}
           </button>
         </div>
       </div>
@@ -496,7 +584,7 @@ export default function Admin() {
           </div>
         </div>
 
-        {loading ? (
+        {loading || !gradesReady ? (
           <div className="grid h-40 place-items-center text-ink-soft" role="status" aria-live="polite">
             <Loader2 className="animate-spin" /><span className="sr-only">Загружаю команды…</span>
           </div>

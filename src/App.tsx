@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, type ReactElement } from 'react'
+import { Suspense, useEffect, type ReactElement } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -6,12 +6,16 @@ import Loader from './components/Loader'
 import UrmNoticeModal from './components/UrmNoticeModal'
 import { getSession, reconcileSession } from './lib/db'
 import { initPing } from './lib/ping'
+import { lazyPage } from './lib/lazyPage'
 
 // Тяжёлые страницы грузятся по требованию — не тянем их в стартовый бандл.
-const Board = lazy(() => import('./pages/Board'))
-const TeamCabinet = lazy(() => import('./pages/TeamCabinet'))
-const Admin = lazy(() => import('./pages/Admin'))
-const Rules = lazy(() => import('./pages/Rules'))
+// lazyPage вместо lazy: после деплоя старые чанки исчезают, и вкладка, открытая ДО
+// выкатки, падала на их загрузке с экраном «Что-то пошло не так». Теперь такая вкладка
+// один раз молча перезагружается и получает актуальные файлы.
+const Board = lazyPage(() => import('./pages/Board'))
+const TeamCabinet = lazyPage(() => import('./pages/TeamCabinet'))
+const Admin = lazyPage(() => import('./pages/Admin'))
+const Rules = lazyPage(() => import('./pages/Rules'))
 
 function RequireSession({ children }: { children: ReactElement }) {
   return getSession() ? children : <Navigate to="/" replace />
