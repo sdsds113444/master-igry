@@ -17,6 +17,10 @@ import {
   SubmissionClosedError,
   type TeamInfo, type RosterMember,
 } from '../lib/db'
+import {
+  hasMeaningfulText, isRealSubmission, hasServerSubmission, hasUnsentDraft,
+  type SavedSubmission,
+} from '../lib/submission'
 
 /** Максимум игроков в составе команды (фиксированный размер — честное начисление). */
 const ROSTER_LIMIT = 10
@@ -54,21 +58,6 @@ import { SUBMITTED_EVENT } from '../components/DeadlineBanner'
 import Badge from '../components/Badge'
 import ErrorCard from '../components/ErrorCard'
 import Icon3D, { EMOJI_ICON_3D, GAME_ICON_3D } from '../components/Icon3D'
-
-/** Есть ли в тексте хоть одна буква или цифра. Одни знаки препинания/пробелы (например
- *  случайная запятая на мобильной клавиатуре) ответом НЕ считаются — иначе такой «ответ»
- *  проходил как сдача и показывал тренеру мусорную «точку». */
-function hasMeaningfulText(s: string): boolean {
-  return /[\p{L}\p{N}]/u.test(s)
-}
-
-/** Реальная сдача = есть осмысленный текст ИЛИ прикреплённый файл. Пустая строка в
- *  answers (напр. выбрали файл, а его загрузку заблокировал корпоративный контур, и
- *  текста не было) сдачей НЕ считается — иначе при следующем заходе кабинет показывал бы
- *  ложное «Ответ отправлен» на пустой заготовке, хотя команде сдавать ещё нечего. */
-function isRealSubmission(answer: string, fileName: string | null): boolean {
-  return hasMeaningfulText(answer) || !!fileName
-}
 
 /** Кнопка скачивания файла обратной связи от тренера (разбор кейсов). Тянет файл по
  *  подписанной ссылке и отдаёт как локальный blob — тем же способом, что тренер в
@@ -150,6 +139,12 @@ export default function TeamCabinet() {
   const [sendError, setSendError] = useState('')
   const [fileAttached, setFileAttached] = useState<string | null>(null) // имя для показа
   const [file, setFile] = useState<File | null>(null)                   // новый выбранный файл (грузим в Storage)
+  // Что РЕАЛЬНО лежит в базе. Заполняется ТОЛЬКО из ответа getSubmission и больше ниоткуда.
+  // Нужно отдельно от answer/fileAttached: answer — редактируемый черновик (правится на
+  // каждое нажатие клавиши), а sent сбрасывается кнопкой «Изменить ответ». Ни то, ни другое
+  // не годится, чтобы утверждать «ваш ответ сохранён» после дедлайна: набранный, но не
+  // отправленный текст показывался бы как сданный, и команда узнавала бы об этом уже по нулю.
+  const [saved, setSaved] = useState<SavedSubmission | null>(null)
 
   const [roster, setRoster] = useState<RosterMember[]>([])
   const [newPlayer, setNewPlayer] = useState('')
@@ -207,7 +202,7 @@ export default function TeamCabinet() {
         // обновляется сам, иначе плашка о новой проверке исчезла бы до того, как её прочитали.
         setSeenFeedback(getSeenFeedback(team.id))
         setCases(c)
-        if (sub) { setAnswer(sub.answer); setFileAttached(sub.fileName); setSent(isRealSubmission(sub.answer, sub.fileName)) }
+        if (sub) { setAnswer(sub.answer); setFileAttached(sub.fileName); setSent(isRealSubmission(sub.answer, sub.fileName)); setSaved({ answer: sub.answer, fileName: sub.fileName }) }
         // sub.filePath — путь к ранее загруженному файлу; новый файл (file) заменит его
 
       } catch {
@@ -278,8 +273,8 @@ export default function TeamCabinet() {
           ])
           setCases(c)
           setOpenCases(new Set())
-          if (sub) { setAnswer(sub.answer); setFileAttached(sub.fileName); setSent(isRealSubmission(sub.answer, sub.fileName)) }
-          else { setAnswer(''); setFileAttached(null); setSent(false) }
+          if (sub) { setAnswer(sub.answer); setFileAttached(sub.fileName); setSent(isRealSubmission(sub.answer, sub.fileName)); setSaved({ answer: sub.answer, fileName: sub.fileName }) }
+          else { setAnswer(''); setFileAttached(null); setSent(false); setSaved(null) }
           setFile(null)
         }
       } catch { /* фоновое обновление — тихо */ } finally { refreshing = false }
@@ -469,6 +464,7 @@ export default function TeamCabinet() {
           // соврёт про сохранённый файл, которого в Storage нет.
           // Выбранный, но ещё не загруженный файл показывает сама кнопка — через `file`.
           setFileAttached(fresh.fileName)
+          setSaved({ answer: fresh.answer, fileName: fresh.fileName })
         }
       } catch { /* данные не потеряны */ }
       if (hadFile && !res.fileUploaded) {
@@ -796,19 +792,30 @@ export default function TeamCabinet() {
                   <span>
                     <b className="text-ink">Приём ответов по этому заданию закрыт.</b> Дедлайн прошёл
                     {current?.deadline_at ? ` (${new Date(current.deadline_at).toLocaleString('ru', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} МСК)` : ''}.
-                    {sent || fileAttached || hasMeaningfulText(answer)
+                    {/* Только серверная правда: saved заполняется исключительно из getSubmission.
+                        По answer/fileAttached судить нельзя — это редактируемый черновик, и
+                        набранный, но НЕ отправленный текст выдавался бы за сданный. */}
+                    {hasServerSubmission(saved)
                       ? ' Ваш ответ сохранён — тренер его увидит.'
                       : ' Если не успели — напишите тренеру в чат.'}
                   </span>
                 </div>
-                {(hasMeaningfulText(answer) || fileAttached) && (
+                {saved && hasServerSubmission(saved) && (
                   <div className="rounded-2xl sf-1 p-4">
-                    {hasMeaningfulText(answer) && <p className="whitespace-pre-wrap text-sm">{answer}</p>}
-                    {fileAttached && (
+                    {hasMeaningfulText(saved.answer) && <p className="whitespace-pre-wrap text-sm">{saved.answer}</p>}
+                    {saved.fileName && (
                       <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-ink-soft">
-                        <Upload size={13} className="shrink-0" /> <span className="truncate">{fileAttached}</span>
+                        <Upload size={13} className="shrink-0" /> <span className="truncate">{saved.fileName}</span>
                       </p>
                     )}
+                  </div>
+                )}
+                {/* Черновик, который команда набрала, но не успела отправить. Показываем ОТДЕЛЬНО
+                    и прямым текстом, что он не ушёл, — иначе человек уверен, что сдал. */}
+                {hasUnsentDraft(answer, saved) && (
+                  <div className="rounded-2xl border-2 border-danger/40 p-4">
+                    <p className="text-xs font-bold text-danger">Этот текст остался в поле и НЕ был отправлен:</p>
+                    <p className="mt-1.5 whitespace-pre-wrap text-sm text-ink-soft">{answer}</p>
                   </div>
                 )}
               </div>
@@ -875,7 +882,8 @@ export default function TeamCabinet() {
                         }
                         setSendError('')
                         setFile(f)
-                        if (f) setFileAttached(f.name)
+                        // fileAttached НЕ трогаем: он серверная правда (см. комментарий у setSaved).
+                        // Выбранный файл показывает сама кнопка — лейбл ниже читает `file?.name ?? fileAttached`.
                         // Сбрасываем значение поля: иначе повторный выбор ТОГО ЖЕ файла
                         // (после неудачной загрузки — «прикрепите ещё раз») не вызывает
                         // change, на экране ничего не меняется, и человек решает, что
