@@ -34,6 +34,9 @@
 19. `migration_cases_difficulty_not_null.sql` — `cases.difficulty` становится `NOT NULL`
     (в `migration_review_fixes.sql` пункт A4 был обёрнут в «exception when others then null»
     и молча не применился).
+20. `migration_vok_scale.sql` — потолок `scores.vok` расширен со 100 до 999: VOC
+    считается как процент выполнения плана и бывает выше сотки. Парная константа
+    `VOK_MAX` в `src/pages/Admin.tsx` — числа обязаны совпадать.
 
 ⚠️ `migration_message_edit.sql` применять **после** `migration_hardening.sql`: тот
 переопределяет `messages_set_sender()` в версии без `user_id`. Актуальная версия

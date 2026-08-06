@@ -44,6 +44,12 @@ function clampNum(raw: string, max: number): number {
   return Number.isFinite(n) ? Math.max(0, Math.min(max, n)) : 0
 }
 
+/** Потолок поля «VOC %». Раньше стоял 100 — считали, что VOC это доля от нуля до
+ *  ста. По факту метрика бывает выше сотки (например, процент выполнения плана),
+ *  и ввод молча обрезался до 100. Держим одним числом: тот же предел стоит
+ *  ограничением в базе (scores_vok_check), и разъехаться им нельзя. */
+const VOK_MAX = 999
+
 interface Grade {
   submitted: boolean
   cases: number
@@ -1078,12 +1084,12 @@ const GradeRowDesktop = memo(function GradeRowDesktop({
       </td>
       <td className="px-2 text-center">
         <input
-          type="number" min={0} max={100}
+          type="number" min={0} max={VOK_MAX}
           value={g.vok}
           disabled={!g.submitted}
           title="Индекс качества обслуживания (VOC). На «Итог» напрямую не влияет — учитывается через галочку «Супер +3 VOC»."
           onFocus={(e) => e.currentTarget.select()}
-          onChange={(e) => onChange({ vok: clampNum(e.target.value, 100) })}
+          onChange={(e) => onChange({ vok: clampNum(e.target.value, VOK_MAX) })}
           className="w-16 rounded-lg border border-black/10 sf-3 px-2 py-1 text-center font-bold outline-none focus:border-alfa/50 disabled:opacity-40"
         />
       </td>
@@ -1207,12 +1213,12 @@ const GradeCard = memo(function GradeCard({
         <label className="block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">VOC %<br/><span className="normal-case font-normal text-[10px] tracking-normal">справочно, в «Итог» не идёт</span></span>
           <input
-            type="number" min={0} max={100}
+            type="number" min={0} max={VOK_MAX}
             value={g.vok}
             disabled={!g.submitted}
             title="Индекс качества обслуживания (VOC). На «Итог» напрямую не влияет — учитывается через галочку «Супер +3 VOC»."
             onFocus={(e) => e.currentTarget.select()}
-            onChange={(e) => onChange({ vok: clampNum(e.target.value, 100) })}
+            onChange={(e) => onChange({ vok: clampNum(e.target.value, VOK_MAX) })}
             className={fieldCls}
           />
         </label>
