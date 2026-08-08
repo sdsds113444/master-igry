@@ -9,6 +9,7 @@ import DeadlineModal from './DeadlineModal'
 import { URM_SEEN_KEY } from './UrmNoticeModal'
 import { getSession, signOut, getGames, pickCurrentGame, getSubmission } from '../lib/db'
 import { teamAvatar } from '../lib/ui'
+import { hasUnsavedWork } from '../lib/unsavedWork'
 
 const linkBase =
   'tap flex items-center justify-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors'
@@ -91,6 +92,10 @@ export default function Layout() {
   }, [deadline])
 
   async function handleSignOut() {
+    // Выход — навигация внутри SPA, beforeunload на неё не срабатывает. Без этой проверки
+    // один промах по иконке (она без подписи и стоит вплотную к переключателю темы) уносил
+    // все проставленные, но не сохранённые баллы: Admin размонтируется, восстановить нечего.
+    if (hasUnsavedWork() && !window.confirm('Есть несохранённые баллы. Выйти и потерять их?')) return
     await signOut()
     navigate('/')
   }

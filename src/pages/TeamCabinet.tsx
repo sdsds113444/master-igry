@@ -276,11 +276,16 @@ export default function TeamCabinet() {
         // ранее сданный ответ. Иначе кабинет висел бы со старым заданием, а повторная сдача
         // падала бы с ложной «ошибкой сети» (RLS не пускает ответ в уже закрытую игру).
         if ((cur?.id ?? null) !== loadedGameId.current) {
-          loadedGameId.current = cur?.id ?? null
           const [c, sub] = await Promise.all([
             cur ? getCases(cur.id) : Promise.resolve([]),
             cur ? getSubmission(me!.id, cur.id) : Promise.resolve(null),
           ])
+          // Отметку о загруженной игре переставляем ТОЛЬКО после успешной загрузки. Раньше она
+          // стояла до запросов: если сеть моргала на этом шаге (в банковском периметре это
+          // регулярно), ошибка гасилась в catch ниже, а отметка уже была переставлена — второй
+          // попытки не случалось никогда. Команда всю неделю видела заголовок новой игры,
+          // кейсы прошлой и зелёное «Ответ отправлен тренеру» — и получала ноль.
+          loadedGameId.current = cur?.id ?? null
           setCases(c)
           setOpenCases(new Set())
           if (sub) { setAnswer(sub.answer); setFileAttached(sub.fileName); setSent(isRealSubmission(sub.answer, sub.fileName)); setSaved({ answer: sub.answer, fileName: sub.fileName }) }

@@ -14,6 +14,7 @@ import Dialog from '../components/Dialog'
 import ErrorCard from '../components/ErrorCard'
 import { teamAvatar, basename, downloadName } from '../lib/ui'
 import { gradeTotal, scoreWrite, sameScoreFields } from '../lib/scoring'
+import { setUnsavedWork } from '../lib/unsavedWork'
 
 /** Строка оценивания из серверных данных. Общая для первой загрузки и фонового
  *  обновления — иначе они разъезжались в трактовке «сдала».
@@ -366,11 +367,20 @@ export default function Admin() {
   // Пока есть несохранённые баллы — предупреждаем при обновлении/закрытии вкладки
   // (главный вектор случайной потери: оценивание — самая трудоёмкая операция).
   // Смену игры внутри страницы уже страхует changeGame() ниже.
+  //
+  // beforeunload не ловит навигацию ВНУТРИ SPA, а кнопка «Выйти» в шапке — именно она:
+  // signOut() + navigate('/'), Admin размонтируется вместе со всем введённым. Поэтому тот же
+  // dirty поднимаем во внешний флаг, который читает Layout перед выходом. Cleanup снимает
+  // его и при сохранении, и при уходе со страницы — «мёртвый» флаг спрашивать не заставит.
   useEffect(() => {
     if (!dirty) return
+    setUnsavedWork(true)
     const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
     window.addEventListener('beforeunload', onBeforeUnload)
-    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+    return () => {
+      setUnsavedWork(false)
+      window.removeEventListener('beforeunload', onBeforeUnload)
+    }
   }, [dirty])
 
   // Смена игры при несохранённых правках: эффект по gameId безусловно перезатирает
@@ -616,7 +626,7 @@ export default function Admin() {
                     key={t.id}
                     t={t}
                     g={grades[t.id]}
-                    hasAnswer={!!answers[t.id]}
+                    hasAnswer={isRealAnswer(answers[t.id])}
                     needsReview={pendingReview.has(t.id)}
                     unread={mentorUnread.has(t.id)}
                     saving={saving}
@@ -639,7 +649,7 @@ export default function Admin() {
                 key={t.id}
                 t={t}
                 g={grades[t.id]}
-                hasAnswer={!!answers[t.id]}
+                hasAnswer={isRealAnswer(answers[t.id])}
                 needsReview={pendingReview.has(t.id)}
                 unread={mentorUnread.has(t.id)}
                 saving={saving}
