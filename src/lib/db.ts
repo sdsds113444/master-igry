@@ -1029,7 +1029,14 @@ export async function listAllTeamsAdmin(): Promise<AdminTeamRow[]> {
     return TEAMS.map((t) => ({ id: t.id, code: t.code, name: t.name, site: t.site, hue: t.hue }))
   }
   const sb = requireClient()
-  const { data, error } = await sb.from('teams').select('id, code, name, site, hue').order('name')
+  // Снятые с геймификации команды (is_active = false) в админке не показываем: иначе тренер
+  // видит их в списке оценивания наравне с играющими и ставит баллы выбывшим. Так уже было
+  // 26.08 — три снятые команды продолжали висеть в списке шестой недели, и понять, кого
+  // именно сняли, было нельзя. Из рейтинга их убирает get_rating, здесь фильтруем сами.
+  // Проверка «список пуст = протухла admin-сессия» (Admin.tsx) от этого не страдает:
+  // активных команд заведомо больше нуля.
+  const { data, error } = await sb.from('teams').select('id, code, name, site, hue')
+    .eq('is_active', true).order('name')
   throwOn(error)
   return (data as AdminTeamRow[]) ?? []
 }
