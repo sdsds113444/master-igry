@@ -364,9 +364,10 @@ export default function TeamCabinet() {
       setRosterError(`В команде максимум ${ROSTER_LIMIT} человек.`)
       return
     }
-    // Дубли имён визуально неразличимы (аватар — первая буква) — предупреждаем.
+    // В составе только имена, поэтому тёзки — обычное дело. Дубль в списке неразличим
+    // (аватар — первая буква), так что не молчим, а подсказываем, как развести.
     if (roster.some((p) => p.name.trim().toLowerCase() === name.toLowerCase())) {
-      setRosterError('Игрок с таким именем уже в составе.')
+      setRosterError('Такое имя уже есть — добавьте первую букву фамилии.')
       return
     }
     // Оптимистично показываем с временным id, затем заменяем на строку из БД
@@ -412,7 +413,7 @@ export default function TeamCabinet() {
     setEditName('')
   }
 
-  /** Сохранить исправленное ФИО. Правки по id строки — тёзки не путаются. */
+  /** Сохранить исправленное имя. Правки по id строки — тёзки не путаются. */
   async function saveEdit(member: RosterMember) {
     if (!me) return
     const name = editName.trim()
@@ -420,7 +421,7 @@ export default function TeamCabinet() {
     if (name === member.name) { cancelEdit(); return } // ничего не поменяли — молча закрываем
     // Та же проверка на дубли, что и при добавлении, но себя в расчёт не берём.
     if (roster.some((p) => p.id !== member.id && p.name.trim().toLowerCase() === name.toLowerCase())) {
-      setRosterError('Игрок с таким именем уже в составе.')
+      setRosterError('Такое имя уже есть — добавьте первую букву фамилии.')
       return
     }
     setRosterError('')
@@ -1099,7 +1100,7 @@ export default function TeamCabinet() {
               <input
                 value={newPlayer}
                 onChange={(e) => setNewPlayer(e.target.value)}
-                placeholder={roster.length >= ROSTER_LIMIT ? 'Состав заполнен' : 'Имя игрока…'}
+                placeholder={roster.length >= ROSTER_LIMIT ? 'Состав заполнен' : 'Имя, без фамилии…'}
                 disabled={roster.length >= ROSTER_LIMIT}
                 className="field flex-1 px-3 py-2 text-sm outline-none disabled:opacity-50"
               />
@@ -1115,7 +1116,7 @@ export default function TeamCabinet() {
             <p className="mt-2 text-xs text-ink-soft">
               {roster.length >= ROSTER_LIMIT
                 ? `Набрано ${ROSTER_LIMIT} из ${ROSTER_LIMIT} — это максимум состава.`
-                : `Капитан регистрирует состав команды (до ${ROSTER_LIMIT} человек).`}
+                : `Капитан регистрирует состав команды (до ${ROSTER_LIMIT} человек). Только имя, без фамилии.`}
             </p>
           </div>
 
