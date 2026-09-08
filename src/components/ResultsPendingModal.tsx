@@ -3,7 +3,7 @@ import { Trophy } from 'lucide-react'
 import Dialog from './Dialog'
 import Confetti from './Confetti'
 import { PRIZES_NOTE } from '../data/mock'
-import { URM_SEEN_KEY } from './UrmNoticeModal'
+import { URM_SEEN_KEY, URM_CLOSED_EVENT } from './UrmNoticeModal'
 
 /** Флаг «окно про подведение итогов уже показывали на этом устройстве». */
 export const RESULTS_SEEN_KEY = 'mi.resultsPendingSeen'
@@ -29,11 +29,18 @@ const STATS = [
 export default function ResultsPendingModal() {
   const [open, setOpen] = useState(false)
   useEffect(() => {
-    try {
-      if (localStorage.getItem(RESULTS_SEEN_KEY)) return
-      if (!localStorage.getItem(URM_SEEN_KEY)) return
-      setOpen(true)
-    } catch { /* приватный режим — просто не показываем */ }
+    function maybeShow() {
+      try {
+        if (localStorage.getItem(RESULTS_SEEN_KEY)) return
+        if (!localStorage.getItem(URM_SEEN_KEY)) return
+        setOpen(true)
+      } catch { /* приватный режим — просто не показываем */ }
+    }
+    maybeShow()
+    // На новом устройстве УРМ-окно ещё открыто в момент монтирования, и без подписки
+    // финальное окно ждало бы перезагрузки страницы.
+    window.addEventListener(URM_CLOSED_EVENT, maybeShow)
+    return () => window.removeEventListener(URM_CLOSED_EVENT, maybeShow)
   }, [])
 
   function close() {

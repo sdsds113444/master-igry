@@ -6,6 +6,11 @@ import Dialog from './Dialog'
  *  чтобы модалка дедлайна (Layout) не выскакивала одновременно на самом первом заходе. */
 export const URM_SEEN_KEY = 'mi.urmNoticeSeen'
 
+/** Событие «окно про УРМ закрыли». Нужно тем модалкам, которые ждут своей очереди:
+ *  проверка localStorage отрабатывает один раз при загрузке, и на НОВОМ устройстве
+ *  следующая модалка иначе не покажется до перезагрузки страницы. */
+export const URM_CLOSED_EVENT = 'mi:urmNoticeClosed'
+
 /** Одноразовое (на устройство) окно: на рабочем компьютере (УРМ) сайт из-за ограничений
  *  банковской сети может работать нестабильно; при ошибках — зайти с телефона/из дома.
  *  Показывается ГЛОБАЛЬНО (App), чтобы застать и тех, кто уже вошёл и страницу входа
@@ -18,6 +23,7 @@ export default function UrmNoticeModal() {
   function close() {
     try { localStorage.setItem(URM_SEEN_KEY, '1') } catch { /* приватный режим: покажем ещё раз в следующий раз, не критично */ }
     setOpen(false)
+    window.dispatchEvent(new Event(URM_CLOSED_EVENT))
   }
   return (
     <Dialog
