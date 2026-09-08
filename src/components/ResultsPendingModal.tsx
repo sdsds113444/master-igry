@@ -5,7 +5,12 @@ import Confetti from './Confetti'
 import { PRIZES_NOTE } from '../data/mock'
 import { URM_SEEN_KEY, URM_CLOSED_EVENT } from './UrmNoticeModal'
 
-/** Флаг «окно про подведение итогов уже показывали на этом устройстве». */
+/** Флаг «окно про подведение итогов уже показывали в ЭТОЙ сессии».
+ *
+ *  Намеренно sessionStorage, а не localStorage: пока идёт подсчёт, сообщение важнее
+ *  привычного «показали один раз и хватит». Закрыл — в этой вкладке больше не мешает,
+ *  но при следующем заходе на сайт снова выскочит. Когда итоги опубликуют, компонент
+ *  убирается целиком, так что надоесть он не успеет. */
 export const RESULTS_SEEN_KEY = 'mi.resultsPendingSeen'
 
 /** Цифры сезона. Не украшение: команда должна увидеть масштаб того, что прошла,
@@ -17,8 +22,8 @@ const STATS = [
   { value: '26', label: 'команд' },
 ]
 
-/** Одноразовое (на устройство) окно после финала сезона: игры закончились, идёт
- *  подсчёт и согласование награждения, результатов пока нет.
+/** Окно после финала сезона: игры закончились, идёт подсчёт и согласование
+ *  награждения, результатов пока нет. Показывается раз за сессию.
  *
  *  Зачем окно, а не только плашка: команды приходят на доску за итогами в первый же
  *  день после марафона, и без объяснения пустой рейтинг читается как «нас забыли».
@@ -31,7 +36,7 @@ export default function ResultsPendingModal() {
   useEffect(() => {
     function maybeShow() {
       try {
-        if (localStorage.getItem(RESULTS_SEEN_KEY)) return
+        if (sessionStorage.getItem(RESULTS_SEEN_KEY)) return
         if (!localStorage.getItem(URM_SEEN_KEY)) return
         setOpen(true)
       } catch { /* приватный режим — просто не показываем */ }
@@ -44,7 +49,7 @@ export default function ResultsPendingModal() {
   }, [])
 
   function close() {
-    try { localStorage.setItem(RESULTS_SEEN_KEY, '1') } catch { /* покажем ещё раз, не критично */ }
+    try { sessionStorage.setItem(RESULTS_SEEN_KEY, '1') } catch { /* покажем ещё раз, не критично */ }
     setOpen(false)
   }
 
