@@ -14,6 +14,7 @@ import Tilt from '../components/Tilt'
 import Confetti from '../components/Confetti'
 import CountUp from '../components/CountUp'
 import ErrorCard from '../components/ErrorCard'
+import { ResultsPendingBanner } from '../components/ResultsPendingModal'
 import Icon3D, { EMOJI_ICON_3D, FEED_ICON_3D, GAME_ICON_3D, type Icon3DName } from '../components/Icon3D'
 
 // Тематические образы КОЯ по играм — кадры выдернуты прямо из мультиков этих игр
@@ -172,6 +173,9 @@ export default function Board() {
 
   return (
     <div className="space-y-6">
+      {/* Финал сезона: на доску приходят за итогами, поэтому объяснение висит здесь
+          постоянно, а не только в одноразовом окне. */}
+      <ResultsPendingBanner />
       <VideoModal
         open={video !== null}
         onClose={() => setVideo(null)}

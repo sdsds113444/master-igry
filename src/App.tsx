@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import Login from './pages/Login'
 import Loader from './components/Loader'
 import UrmNoticeModal from './components/UrmNoticeModal'
+import ResultsPendingModal from './components/ResultsPendingModal'
 import { getSession, reconcileSession } from './lib/db'
 import { initPing } from './lib/ping'
 import { lazyPage } from './lib/lazyPage'
@@ -46,6 +47,9 @@ export default function App() {
       {/* Глобально: одноразовое предупреждение про нестабильность на рабочем УРМ.
           Показывается поверх любой страницы, чтобы застать и уже вошедшие команды. */}
       <UrmNoticeModal />
+      {/* Финал сезона: игры кончились, рейтинг ещё не итоговый. Показываем после
+          УРМ-окна, чтобы две модалки не выскочили разом. */}
+      <ResultsPendingModal />
       <Suspense fallback={<Loader minH="100vh" />}>
         <Routes>
           <Route path="/" element={<Login />} />
