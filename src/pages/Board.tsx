@@ -15,6 +15,7 @@ import Confetti from '../components/Confetti'
 import CountUp from '../components/CountUp'
 import ErrorCard from '../components/ErrorCard'
 import { ResultsPendingBanner } from '../components/ResultsPendingModal'
+import { SEASON_RESULTS, SeasonResultsBanner } from '../components/SeasonResults'
 import Icon3D, { EMOJI_ICON_3D, FEED_ICON_3D, GAME_ICON_3D, type Icon3DName } from '../components/Icon3D'
 
 // Тематические образы КОЯ по играм — кадры выдернуты прямо из мультиков этих игр
@@ -168,6 +169,8 @@ export default function Board() {
   // Сезон стартовал, только если админ уже опубликовал хотя бы одну игру. До старта
   // (все игры locked) шапка не утверждает «сейчас идёт игра».
   const seasonStarted = games.some((g) => g.status === 'current' || g.status === 'done')
+  // Все игры сыграны — сезон закрыт: шапка не зовёт «ждать старта».
+  const seasonOver = games.length > 0 && games.every((g) => g.status === 'done')
   // Опорная игра для ссылок (неделя в шапке, фолбэк ленты), когда активной ещё нет.
   const refGame = activeGame ?? games.find((g) => g.status === 'done') ?? games[0]
 
@@ -175,7 +178,7 @@ export default function Board() {
     <div className="space-y-6">
       {/* Финал сезона: на доску приходят за итогами, поэтому объяснение висит здесь
           постоянно, а не только в одноразовом окне. */}
-      <ResultsPendingBanner />
+      {SEASON_RESULTS ? <SeasonResultsBanner results={SEASON_RESULTS} /> : <ResultsPendingBanner />}
       <VideoModal
         open={video !== null}
         onClose={() => setVideo(null)}
@@ -199,13 +202,15 @@ export default function Board() {
           {/* Текст */}
           <div className="relative z-10 p-7 sm:p-9">
             <span className="inline-flex items-center gap-2 rounded-full bg-alfa/10 px-3 py-1 text-xs font-bold text-alfa-ink">
-              <Flame size={13} /> {seasonStarted ? `Сезон 1 · Неделя ${refGame.week} из 9` : 'Сезон 1 · Скоро старт'}
+              <Flame size={13} /> {seasonOver ? 'Сезон 1 · Завершён' : seasonStarted ? `Сезон 1 · Неделя ${refGame.week} из 9` : 'Сезон 1 · Скоро старт'}
             </span>
             <h1 className="mt-3 font-display text-3xl font-extrabold leading-[1.1] sm:text-4xl">
               Общая доска <span className="text-gradient">чемпионата</span>
             </h1>
             <p className="mt-2 max-w-md text-sm text-ink-soft">
-              {activeGame
+              {seasonOver
+                ? <>Все {games.length} игр сезона сыграны — итоги выше. Здесь можно пересмотреть мультики КОЯ и рейтинг всех {rating.length} команд.</>
+                : activeGame
                 ? <>Здесь выходят мультики КОЯ, прилетают задания недели и обновляется рейтинг всех {rating.length} команд. Сейчас идёт игра «{activeGame.title}».</>
                 : <>Здесь будут выходить мультики КОЯ, прилетать задания недели и обновляться рейтинг всех {rating.length} команд. Начните со вступительного мультика — он объясняет правила. Игры сезона откроются на старте.</>}
             </p>

@@ -939,11 +939,23 @@ export default function TeamCabinet() {
           </>
           ) : (
             <div className="glass rounded-glass p-6 text-center">
-              <h2 className="font-display text-xl font-extrabold">Задание недели скоро появится</h2>
-              <p className="mt-1 text-sm text-ink-soft">
-                Мультик и кейсы откроются, когда организатор запустит игру недели.
-                А пока соберите состав команды и обсудите всё в чате.
-              </p>
+              {games.length > 0 && games.every((g) => g.status === 'done') ? (
+                <>
+                  <h2 className="font-display text-xl font-extrabold">Сезон завершён 🎉</h2>
+                  <p className="mt-1 text-sm text-ink-soft">
+                    Все игры сыграны, приём ответов закрыт. Итоги и победители — на доске.
+                    Спасибо за сезон!
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 className="font-display text-xl font-extrabold">Задание недели скоро появится</h2>
+                  <p className="mt-1 text-sm text-ink-soft">
+                    Мультик и кейсы откроются, когда организатор запустит игру недели.
+                    А пока соберите состав команды и обсудите всё в чате.
+                  </p>
+                </>
+              )}
             </div>
           )}
 

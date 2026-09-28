@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Loader from './components/Loader'
 import UrmNoticeModal from './components/UrmNoticeModal'
 import ResultsPendingModal from './components/ResultsPendingModal'
+import { SEASON_RESULTS, SeasonResultsModal } from './components/SeasonResults'
 import { getSession, reconcileSession } from './lib/db'
 import { initPing } from './lib/ping'
 import { lazyPage } from './lib/lazyPage'
@@ -49,7 +50,7 @@ export default function App() {
       <UrmNoticeModal />
       {/* Финал сезона: игры кончились, рейтинг ещё не итоговый. Показываем после
           УРМ-окна, чтобы две модалки не выскочили разом. */}
-      <ResultsPendingModal />
+      {SEASON_RESULTS ? <SeasonResultsModal results={SEASON_RESULTS} /> : <ResultsPendingModal />}
       <Suspense fallback={<Loader minH="100vh" />}>
         <Routes>
           <Route path="/" element={<Login />} />
